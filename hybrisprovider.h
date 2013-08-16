@@ -23,7 +23,7 @@ class HybrisProvider : public QObject, public QDBusContext
 public:
     explicit HybrisProvider(QObject *parent = 0);
     ~HybrisProvider();
-    
+
     // org.freedesktop.Geoclue
     void AddReference();
     void RemoveReference();
@@ -69,6 +69,10 @@ public:
     // org.freedesktop.Geoclue.Velocity
     int GetVelocity(int &timestamp, double &speed, double &direction, double &climb);
 
+    // org.freedesktop.Geoclue.Satellite
+    int GetLastSatellite(int &satelliteUsed, int &satelliteVisible, QList<int> &usedPrn, QList<SatelliteInfo> &satInfo);
+    int GetSatellite(int &satelliteUsed, int &satelliteVisible, QList<int> &usedPrn, QList<SatelliteInfo> &satInfo);
+
 signals:
     // org.freedesktop.Geoclue
     void StatusChanged(int status);
@@ -78,6 +82,9 @@ signals:
 
     // org.freedesktop.Geoclue.Velocity
     void VelocityChanged(int fields, int timestamp, double speed, double direction, double climb);
+
+    // org.freedesktop.Geoclue.Satellite
+    void SatelliteChanged(int timestamp, int satelliteUsed, int satelliteVisible, const QList<int> &usedPrn, const QList<SatelliteInfo> &satInfos);
 
 protected:
     void timerEvent(QTimerEvent *event);

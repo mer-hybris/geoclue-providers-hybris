@@ -91,7 +91,46 @@ private:
     QSharedDataPointer<LocationData> d;
 };
 
+class SatelliteInfoData : public QSharedData
+{
+public:
+    SatelliteInfoData()
+    :   prn(0), elevation(0), azimuth(0), snr(0)
+    { }
+    SatelliteInfoData(const SatelliteInfoData &other)
+    :   QSharedData(other), prn(other.prn), elevation(other.elevation), azimuth(other.azimuth),
+        snr(other.snr)
+    { }
+    ~SatelliteInfoData() { }
+
+    int prn;        // Item 0
+    int elevation;  // Item 1
+    int azimuth;    // Item 2
+    int snr;        // Item 3
+};
+
+class SatelliteInfo
+{
+public:
+    SatelliteInfo() : d(new SatelliteInfoData) { }
+    SatelliteInfo(const SatelliteInfo &other) : d(other.d) { }
+
+    inline int prn() const { return d->prn; }
+    inline void setPrn(int prn) { d->prn = prn; }
+    inline int elevation() const { return d->elevation; }
+    inline void setElevation(int elevation) { d->elevation = elevation; }
+    inline int azimuth() const { return d->azimuth; }
+    inline void setAzimuth(int azimuth) { d->azimuth = azimuth; }
+    inline int snr() const { return d->snr; }
+    inline void setSnr(int snr) { d->snr = snr; }
+
+private:
+    QSharedDataPointer<SatelliteInfoData> d;
+};
+
 Q_DECLARE_METATYPE(Accuracy)
 Q_DECLARE_METATYPE(Location)
+Q_DECLARE_METATYPE(SatelliteInfo)
+Q_DECLARE_METATYPE(QList<SatelliteInfo>)
 
 #endif // LOCATIONTYPES_H

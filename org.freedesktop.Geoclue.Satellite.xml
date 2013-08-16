@@ -1,0 +1,32 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.freedesktop.Geoclue.Satellite">
+    <method name="GetSatellite">
+      <arg type="i" name="timestamp" direction="out"/>
+      <arg type="i" name="satellite_used" direction="out"/>
+      <arg type="i" name="satellite_visible" direction="out"/>
+      <arg type="ai" name="used_prn" direction="out"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out3" value="QList&lt;int&gt;"/>
+      <arg type="a(iiii)" name="sat_info" direction="out"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out4" value="QList&lt;SatelliteInfo&gt;"/>
+    </method>
+    <method name="GetLastSatellite">
+      <arg type="i" name="timestamp" direction="out"/>
+      <arg type="i" name="satellite_used" direction="out"/>
+      <arg type="i" name="satellite_visible" direction="out"/>
+      <arg type="ai" name="used_prn" direction="out"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out3" value="QList&lt;int&gt;"/>
+      <arg type="a(iiii)" name="sat_info" direction="out"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out4" value="QList&lt;SatelliteInfo&gt;"/>
+    </method>
+    <signal name="SatelliteChanged">
+      <arg type="i" name="timestamp"/>
+      <arg type="i" name="satellite_used"/>
+      <arg type="i" name="satellite_visible"/>
+      <arg type="ai" name="used_prn"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In3" value="QList&lt;int&gt;"/>
+      <arg type="a(iiii)" name="sat_info"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In4" value="QList&lt;SatelliteInfo&gt;"/>
+    </signal>
+  </interface>
+</node>

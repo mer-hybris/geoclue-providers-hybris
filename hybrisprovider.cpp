@@ -4,8 +4,10 @@
 */
 
 #include "hybrisprovider.h"
-#include "position_adaptor.h"
 #include "geoclue_adaptor.h"
+#include "position_adaptor.h"
+#include "velocity_adaptor.h"
+#include "satellite_adaptor.h"
 
 namespace
 {
@@ -203,6 +205,55 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, Accuracy &accurac
     return argument;
 }
 
+QDBusArgument &operator<<(QDBusArgument &argument, const SatelliteInfo &si)
+{
+    argument.beginStructure();
+    argument << si.prn() << si.elevation() << si.azimuth() << si.snr();
+    argument.endStructure();
+    return argument;
+}
+
+const QDBusArgument &operator>>(const QDBusArgument &argument, SatelliteInfo &si)
+{
+    int a;
+
+    argument.beginStructure();
+    argument >> a;
+    si.setPrn(a);
+    argument >> a;
+    si.setElevation(a);
+    argument >> a;
+    si.setAzimuth(a);
+    argument >> a;
+    si.setSnr(a);
+    argument.endStructure();
+    return argument;
+}
+
+QDBusArgument &operator<<(QDBusArgument &argument, const QList<SatelliteInfo> &sis)
+{
+    argument.beginArray(qMetaTypeId<SatelliteInfo>());
+    foreach (const SatelliteInfo &si, sis)
+        argument << si;
+    argument.endArray();
+
+    return argument;
+}
+
+const QDBusArgument &operator>>(const QDBusArgument &argument, QList<SatelliteInfo> &sis)
+{
+    sis.clear();
+
+    argument.beginArray();
+    while (!argument.atEnd()) {
+        SatelliteInfo si;
+        argument >> si;
+        sis.append(si);
+    }
+    argument.endArray();
+
+    return argument;
+}
 
 HybrisProvider::HybrisProvider(QObject *parent)
 :   QObject(parent), m_gps(0), m_ulpNetwork(0), m_ulpPhoneContext(0), m_agps(0), m_agpsril(0),
@@ -214,11 +265,15 @@ HybrisProvider::HybrisProvider(QObject *parent)
     qRegisterMetaType<UlpPhoneContextRequest *>();
     qRegisterMetaType<Location>();
     qDBusRegisterMetaType<Accuracy>();
+    qDBusRegisterMetaType<SatelliteInfo>();
+    qDBusRegisterMetaType<QList<SatelliteInfo> >();
 
     staticProvider = this;
 
-    new PositionAdaptor(this);
     new GeoclueAdaptor(this);
+    new PositionAdaptor(this);
+    new VelocityAdaptor(this);
+    new SatelliteAdaptor(this);
 
     m_watcher = new QDBusServiceWatcher(this);
     m_watcher->setConnection(QDBusConnection::sessionBus());
@@ -416,6 +471,20 @@ int HybrisProvider::GetVelocity(int &timestamp, double &speed, double &direction
     }
 
     return velocityFields;
+}
+
+int HybrisProvider::GetLastSatellite(int &satelliteUsed, int &satelliteVisible,
+                                     QList<int> &usedPrn, QList<SatelliteInfo> &satInfo)
+{
+    // Return satellite information
+    return 0;
+}
+
+int HybrisProvider::GetSatellite(int &satelliteUsed, int &satelliteVisible, QList<int> &usedPrn,
+                                 QList<SatelliteInfo> &satInfo)
+{
+    // Return satellite information
+    return 0;
 }
 
 void HybrisProvider::timerEvent(QTimerEvent *event)
