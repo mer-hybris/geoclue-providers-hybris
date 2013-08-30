@@ -92,12 +92,15 @@ protected:
 private slots:
     void requestPhoneContext(UlpPhoneContextRequest *req);
     void setLocation(const Location &location);
+    void setSatellite(const QList<SatelliteInfo> &satellites, const QList<int> &used);
     void serviceUnregistered(const QString &service);
 
 private:
     void emitLocationChanged();
+    void emitSatelliteChanged();
     void startPositioningIfNeeded();
     void stopPositioningIfNeeded();
+    void setStatus(Status status);
 
     gps_device_t *m_gpsDevice;
 
@@ -116,12 +119,17 @@ private:
 
     Location m_currentLocation;
 
+    qint64 m_satelliteTimestamp;
+    QList<SatelliteInfo> m_visibleSatellites;
+    QList<int> m_usedPrns;
+
     QDBusServiceWatcher *m_watcher;
     QStringList m_watchedServices;
 
     QList<QDBusMessage> m_pendingCalls;
 
     int m_idleTimer;
+    Status m_status;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)

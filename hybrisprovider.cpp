@@ -17,7 +17,7 @@ HybrisProvider *staticProvider = 0;
 const qint64 MaxLocationAge = 1000;
 const int QuitIdleTime = 30000;
 const quint32 MinimumInterval = 1000;
-const quint32 PreferredAccuracy = 1;
+const quint32 PreferredAccuracy = 0;
 const quint32 PreferredInitialFixTime = 0;
 
 void locationCallback(GpsLocation *location)
@@ -44,6 +44,7 @@ void locationCallback(GpsLocation *location)
         Accuracy accuracy;
         accuracy.setHorizontal(location->accuracy);
         accuracy.setVertical(location->accuracy);
+        loc.setAccuracy(accuracy);
     }
 
     QMetaObject::invokeMethod(staticProvider, "setLocation", Q_ARG(Location, loc));
@@ -56,7 +57,25 @@ void statusCallback(GpsStatus *status)
 
 void svStatusCallback(GpsSvStatus *svStatus)
 {
-    qDebug() << Q_FUNC_INFO << svStatus->num_svs;
+    QList<SatelliteInfo> satellites;
+    QList<int> usedPrns;
+
+    for (int i = 0; i < svStatus->num_svs; ++i) {
+        SatelliteInfo satInfo;
+        GpsSvInfo &svInfo = svStatus->sv_list[i];
+        satInfo.setPrn(svInfo.prn);
+        satInfo.setSnr(svInfo.snr);
+        satInfo.setElevation(svInfo.elevation);
+        satInfo.setAzimuth(svInfo.azimuth);
+        satellites.append(satInfo);
+
+        if (svStatus->used_in_fix_mask & (1 << i))
+            usedPrns.append(svInfo.prn);
+    }
+
+    QMetaObject::invokeMethod(staticProvider, "setSatellite",
+                              Q_ARG(QList<SatelliteInfo>, satellites),
+                              Q_ARG(QList<int>, usedPrns));
 }
 
 void nmeaCallback(GpsUtcTime timestamp, const char *nmea, int length)
@@ -257,7 +276,7 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, QList<SatelliteIn
 
 HybrisProvider::HybrisProvider(QObject *parent)
 :   QObject(parent), m_gps(0), m_ulpNetwork(0), m_ulpPhoneContext(0), m_agps(0), m_agpsril(0),
-    m_gpsni(0), m_xtra(0)
+    m_gpsni(0), m_xtra(0), m_status(StatusAcquiring)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -353,6 +372,13 @@ HybrisProvider::HybrisProvider(QObject *parent)
     }
 
     m_debug = static_cast<const GpsDebugInterface *>(m_gps->get_extension(GPS_DEBUG_INTERFACE));
+
+    if (!m_gps)
+        m_status = StatusUnavailable;
+
+    // Next two lines are for testing.
+    m_watchedServices.append(QString());
+    startPositioningIfNeeded();
 }
 
 HybrisProvider::~HybrisProvider()
@@ -368,8 +394,6 @@ HybrisProvider::~HybrisProvider()
 
 void HybrisProvider::AddReference()
 {
-    qDebug() << Q_FUNC_INFO;
-
     if (!calledFromDBus())
         qFatal("AddReference must only be called from DBus");
 
@@ -384,8 +408,6 @@ void HybrisProvider::AddReference()
 
 void HybrisProvider::RemoveReference()
 {
-    qDebug() << Q_FUNC_INFO;
-
     if (!calledFromDBus())
         qFatal("RemoveReference must only be called from DBus");
 
@@ -405,11 +427,7 @@ QString HybrisProvider::GetProviderInfo(QString &description)
 
 int HybrisProvider::GetStatus()
 {
-    qDebug() << Q_FUNC_INFO;
-    if (!m_gps && !m_agps && !m_agpsril)
-        return StatusUnavailable;
-
-    return StatusAcquiring;
+    return m_status;
 }
 
 void HybrisProvider::SetOptions(const QVariantMap &options)
@@ -420,8 +438,6 @@ void HybrisProvider::SetOptions(const QVariantMap &options)
 int HybrisProvider::GetPosition(int &timestamp, double &latitude, double &longitude,
                                 double &altitude, Accuracy &accuracy)
 {
-    qDebug() << Q_FUNC_INFO;
-
     PositionFields positionFields = NoPositionFields;
 
     if (m_currentLocation.timestamp() < QDateTime::currentMSecsSinceEpoch() - MaxLocationAge) {
@@ -448,12 +464,10 @@ int HybrisProvider::GetPosition(int &timestamp, double &latitude, double &longit
 
 int HybrisProvider::GetVelocity(int &timestamp, double &speed, double &direction, double &climb)
 {
-    qDebug() << Q_FUNC_INFO;
-
     VelocityFields velocityFields = NoVelocityFields;
 
     if (m_currentLocation.timestamp() < QDateTime::currentMSecsSinceEpoch() - MaxLocationAge) {
-        // Current position is too old, wait for update.
+        // Current velocity is too old, wait for update.
         setDelayedReply(true);
         m_pendingCalls.append(message());
         startPositioningIfNeeded();
@@ -516,13 +530,21 @@ void HybrisProvider::requestPhoneContext(UlpPhoneContextRequest *req)
 
 void HybrisProvider::setLocation(const Location &location)
 {
+    setStatus(StatusAvailable);
     m_currentLocation = location;
     emitLocationChanged();
 }
 
+void HybrisProvider::setSatellite(const QList<SatelliteInfo> &satellites, const QList<int> &used)
+{
+    m_satelliteTimestamp = QDateTime::currentMSecsSinceEpoch();
+    m_visibleSatellites = satellites;
+    m_usedPrns = used;
+    emitSatelliteChanged();
+}
+
 void HybrisProvider::serviceUnregistered(const QString &service)
 {
-    qDebug() << Q_FUNC_INFO;
     m_watchedServices.removeAll(service);
     m_watcher->removeWatchedService(service);
     stopPositioningIfNeeded();
@@ -530,7 +552,6 @@ void HybrisProvider::serviceUnregistered(const QString &service)
 
 void HybrisProvider::emitLocationChanged()
 {
-    qDebug() << Q_FUNC_INFO;
     PositionFields positionFields = NoPositionFields;
 
     if (!qIsNaN(m_currentLocation.latitude()))
@@ -585,20 +606,40 @@ void HybrisProvider::emitLocationChanged()
     }
 }
 
+void HybrisProvider::emitSatelliteChanged()
+{
+    emit SatelliteChanged(m_satelliteTimestamp, m_usedPrns.length(), m_visibleSatellites.length(),
+                          m_usedPrns, m_visibleSatellites);
+
+    if (!m_pendingCalls.isEmpty()) {
+        QVariantList arguments;
+        arguments.append(int(m_satelliteTimestamp));
+        arguments.append(m_usedPrns.length());
+        arguments.append(m_visibleSatellites.length());
+        arguments.append(QVariant::fromValue(m_usedPrns));
+        arguments.append(QVariant::fromValue(m_visibleSatellites));
+
+        QDBusConnection connection = QDBusConnection::sessionBus();
+        foreach (const QDBusMessage &message, m_pendingCalls) {
+            if (message.member() == QStringLiteral("GetSatellite"))
+                connection.send(message.createReply(arguments));
+            else
+                qWarning("Unknown method for pending call, %s", qPrintable(message.member()));
+        }
+
+        m_pendingCalls.clear();
+    }
+}
+
 void HybrisProvider::startPositioningIfNeeded()
 {
-    qDebug() << Q_FUNC_INFO;
-
     if (m_watchedServices.length() + m_pendingCalls.length() != 1)
         return;
 
     if (m_idleTimer != -1) {
-        qDebug() << "Stopping idle timer";
         killTimer(m_idleTimer);
         m_idleTimer = -1;
     }
-
-    qDebug() << "Setting positioning mode";
 
     int error = m_gps->set_position_mode(GPS_POSITION_MODE_STANDALONE,
                                          GPS_POSITION_RECURRENCE_PERIODIC, MinimumInterval,
@@ -607,8 +648,6 @@ void HybrisProvider::startPositioningIfNeeded()
         qWarning("Failed to set position mode, error %d\n", error);
         return;
     }
-
-    qDebug() << "Starting positioning";
 
     error = m_gps->start();
     if (error) {
@@ -619,17 +658,21 @@ void HybrisProvider::startPositioningIfNeeded()
 
 void HybrisProvider::stopPositioningIfNeeded()
 {
-    qDebug() << Q_FUNC_INFO;
-
     if (!m_watchedServices.isEmpty() || !m_pendingCalls.isEmpty())
         return;
-
-    qDebug() << "Stoping positioning";
 
     int error = m_gps->stop();
     if (error)
         qWarning("Failed to stop positioning, error %d\n", error);
 
-    qDebug() << "Going to quit in" << QuitIdleTime << "ms";
     m_idleTimer = startTimer(QuitIdleTime);
+}
+
+void HybrisProvider::setStatus(HybrisProvider::Status status)
+{
+    if (m_status == status)
+        return;
+
+    m_status = status;
+    emit StatusChanged(m_status);
 }

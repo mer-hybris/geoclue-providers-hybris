@@ -30,7 +30,8 @@ HEADERS += \
     hybrisprovider.h \
     locationtypes.h
 
-SOURCES += main.cpp \
+SOURCES += \
+    main.cpp \
     hybrisprovider.cpp
 
 OTHER_FILES = \
