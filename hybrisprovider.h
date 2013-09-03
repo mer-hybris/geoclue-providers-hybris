@@ -126,8 +126,6 @@ private:
     QDBusServiceWatcher *m_watcher;
     QStringList m_watchedServices;
 
-    QList<QDBusMessage> m_pendingCalls;
-
     int m_idleTimer;
     Status m_status;
 };

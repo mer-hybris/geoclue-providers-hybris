@@ -14,7 +14,6 @@ namespace
 
 HybrisProvider *staticProvider = 0;
 
-const qint64 MaxLocationAge = 1000;
 const int QuitIdleTime = 30000;
 const quint32 MinimumInterval = 1000;
 const quint32 PreferredAccuracy = 0;
@@ -440,24 +439,17 @@ int HybrisProvider::GetPosition(int &timestamp, double &latitude, double &longit
 {
     PositionFields positionFields = NoPositionFields;
 
-    if (m_currentLocation.timestamp() < QDateTime::currentMSecsSinceEpoch() - MaxLocationAge) {
-        // Current position is too old, wait for update.
-        setDelayedReply(true);
-        m_pendingCalls.append(message());
-        startPositioningIfNeeded();
-    } else {
-        timestamp = m_currentLocation.timestamp();
-        if (!qIsNaN(m_currentLocation.latitude()))
-            positionFields |= LatitudePresent;
-        latitude = m_currentLocation.latitude();
-        if (!qIsNaN(m_currentLocation.longitude()))
-            positionFields |= LongitudePresent;
-        longitude = m_currentLocation.longitude();
-        if (!qIsNaN(m_currentLocation.altitude()))
-            positionFields |= AltitudePresent;
-        altitude = m_currentLocation.altitude();
-        accuracy = m_currentLocation.accuracy();
-    }
+    timestamp = m_currentLocation.timestamp();
+    if (!qIsNaN(m_currentLocation.latitude()))
+        positionFields |= LatitudePresent;
+    latitude = m_currentLocation.latitude();
+    if (!qIsNaN(m_currentLocation.longitude()))
+        positionFields |= LongitudePresent;
+    longitude = m_currentLocation.longitude();
+    if (!qIsNaN(m_currentLocation.altitude()))
+        positionFields |= AltitudePresent;
+    altitude = m_currentLocation.altitude();
+    accuracy = m_currentLocation.accuracy();
 
     return positionFields;
 }
@@ -466,23 +458,16 @@ int HybrisProvider::GetVelocity(int &timestamp, double &speed, double &direction
 {
     VelocityFields velocityFields = NoVelocityFields;
 
-    if (m_currentLocation.timestamp() < QDateTime::currentMSecsSinceEpoch() - MaxLocationAge) {
-        // Current velocity is too old, wait for update.
-        setDelayedReply(true);
-        m_pendingCalls.append(message());
-        startPositioningIfNeeded();
-    } else {
-        timestamp = m_currentLocation.timestamp();
-        if (!qIsNaN(m_currentLocation.speed()))
-            velocityFields |= SpeedPresent;
-        speed = m_currentLocation.speed();
-        if (!qIsNaN(m_currentLocation.direction()))
-            velocityFields |= DirectionPresent;
-        direction = m_currentLocation.direction();
-        if (!qIsNaN(m_currentLocation.climb()))
-            velocityFields |= ClimbPresent;
-        climb = m_currentLocation.climb();
-    }
+    timestamp = m_currentLocation.timestamp();
+    if (!qIsNaN(m_currentLocation.speed()))
+        velocityFields |= SpeedPresent;
+    speed = m_currentLocation.speed();
+    if (!qIsNaN(m_currentLocation.direction()))
+        velocityFields |= DirectionPresent;
+    direction = m_currentLocation.direction();
+    if (!qIsNaN(m_currentLocation.climb()))
+        velocityFields |= ClimbPresent;
+    climb = m_currentLocation.climb();
 
     return velocityFields;
 }
@@ -576,64 +561,17 @@ void HybrisProvider::emitLocationChanged()
 
     emit VelocityChanged(velocityFields, m_currentLocation.timestamp(), m_currentLocation.speed(),
                          m_currentLocation.direction(), m_currentLocation.climb());
-
-    if (!m_pendingCalls.isEmpty()) {
-        QVariantList positionArguments;
-        positionArguments.append(QVariant::fromValue<qint32>(positionFields));
-        positionArguments.append(int(m_currentLocation.timestamp()));
-        positionArguments.append(m_currentLocation.latitude());
-        positionArguments.append(m_currentLocation.longitude());
-        positionArguments.append(m_currentLocation.altitude());
-        positionArguments.append(QVariant::fromValue(m_currentLocation.accuracy()));
-
-        QVariantList velocityArguments;
-        velocityArguments.append(QVariant::fromValue<qint32>(velocityFields));
-        velocityArguments.append(m_currentLocation.speed());
-        velocityArguments.append(m_currentLocation.direction());
-        velocityArguments.append(m_currentLocation.climb());
-
-        QDBusConnection connection = QDBusConnection::sessionBus();
-        foreach (const QDBusMessage &message, m_pendingCalls) {
-            if (message.member() == QStringLiteral("GetPosition"))
-                connection.send(message.createReply(positionArguments));
-            else if (message.member() == QStringLiteral("GetVelocity"))
-                connection.send(message.createReply(velocityArguments));
-            else
-                qWarning("Unknown method for pending call, %s", qPrintable(message.member()));
-        }
-
-        m_pendingCalls.clear();
-    }
 }
 
 void HybrisProvider::emitSatelliteChanged()
 {
     emit SatelliteChanged(m_satelliteTimestamp, m_usedPrns.length(), m_visibleSatellites.length(),
                           m_usedPrns, m_visibleSatellites);
-
-    if (!m_pendingCalls.isEmpty()) {
-        QVariantList arguments;
-        arguments.append(int(m_satelliteTimestamp));
-        arguments.append(m_usedPrns.length());
-        arguments.append(m_visibleSatellites.length());
-        arguments.append(QVariant::fromValue(m_usedPrns));
-        arguments.append(QVariant::fromValue(m_visibleSatellites));
-
-        QDBusConnection connection = QDBusConnection::sessionBus();
-        foreach (const QDBusMessage &message, m_pendingCalls) {
-            if (message.member() == QStringLiteral("GetSatellite"))
-                connection.send(message.createReply(arguments));
-            else
-                qWarning("Unknown method for pending call, %s", qPrintable(message.member()));
-        }
-
-        m_pendingCalls.clear();
-    }
 }
 
 void HybrisProvider::startPositioningIfNeeded()
 {
-    if (m_watchedServices.length() + m_pendingCalls.length() != 1)
+    if (m_watchedServices.length() != 1)
         return;
 
     if (m_idleTimer != -1) {
@@ -658,7 +596,7 @@ void HybrisProvider::startPositioningIfNeeded()
 
 void HybrisProvider::stopPositioningIfNeeded()
 {
-    if (!m_watchedServices.isEmpty() || !m_pendingCalls.isEmpty())
+    if (!m_watchedServices.isEmpty())
         return;
 
     int error = m_gps->stop();
