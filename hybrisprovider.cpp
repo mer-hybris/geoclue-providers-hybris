@@ -374,10 +374,6 @@ HybrisProvider::HybrisProvider(QObject *parent)
 
     if (!m_gps)
         m_status = StatusUnavailable;
-
-    // Next two lines are for testing.
-    m_watchedServices.append(QString());
-    startPositioningIfNeeded();
 }
 
 HybrisProvider::~HybrisProvider()
