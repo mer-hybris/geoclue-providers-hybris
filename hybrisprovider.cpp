@@ -471,15 +471,23 @@ int HybrisProvider::GetVelocity(int &timestamp, double &speed, double &direction
 int HybrisProvider::GetLastSatellite(int &satelliteUsed, int &satelliteVisible,
                                      QList<int> &usedPrn, QList<SatelliteInfo> &satInfo)
 {
-    // Return satellite information
-    return 0;
+    satelliteUsed = m_previousUsedPrns.length();
+    satelliteVisible = m_previousVisibleSatellites.length();
+    usedPrn = m_previousUsedPrns;
+    satInfo = m_previousVisibleSatellites;
+
+    return m_previousSatelliteTimestamp;
 }
 
 int HybrisProvider::GetSatellite(int &satelliteUsed, int &satelliteVisible, QList<int> &usedPrn,
                                  QList<SatelliteInfo> &satInfo)
 {
-    // Return satellite information
-    return 0;
+    satelliteUsed = m_usedPrns.length();
+    satelliteVisible = m_visibleSatellites.length();
+    usedPrn = m_usedPrns;
+    satInfo = m_visibleSatellites;
+
+    return m_satelliteTimestamp;
 }
 
 void HybrisProvider::timerEvent(QTimerEvent *event)
@@ -518,6 +526,10 @@ void HybrisProvider::setLocation(const Location &location)
 
 void HybrisProvider::setSatellite(const QList<SatelliteInfo> &satellites, const QList<int> &used)
 {
+    m_previousSatelliteTimestamp = m_satelliteTimestamp;
+    m_previousVisibleSatellites = m_visibleSatellites;
+    m_previousUsedPrns = m_usedPrns;
+
     m_satelliteTimestamp = QDateTime::currentMSecsSinceEpoch();
     m_visibleSatellites = satellites;
     m_usedPrns = used;
