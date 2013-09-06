@@ -123,6 +123,10 @@ private:
     QList<SatelliteInfo> m_visibleSatellites;
     QList<int> m_usedPrns;
 
+    qint64 m_previousSatelliteTimestamp;
+    QList<SatelliteInfo> m_previousVisibleSatellites;
+    QList<int> m_previousUsedPrns;
+
     QDBusServiceWatcher *m_watcher;
     QStringList m_watchedServices;
 
