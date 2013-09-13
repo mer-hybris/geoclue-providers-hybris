@@ -9,8 +9,21 @@
 #include "velocity_adaptor.h"
 #include "satellite_adaptor.h"
 
+#include <QtNetwork/QNetworkAccessManager>
+#include <QtNetwork/QNetworkReply>
+#include <QtNetwork/QHostAddress>
+
+#include <networkmanager.h>
+#include <networkservice.h>
+
+#include <qofonomanager.h>
+#include <qofonoconnectionmanager.h>
+#include <qofonoconnectioncontext.h>
+
 #include <mlite5/MGConfItem>
 #include <contextproperty.h>
+
+Q_DECLARE_METATYPE(QHostAddress)
 
 namespace
 {
@@ -54,7 +67,7 @@ void locationCallback(GpsLocation *location)
 
 void statusCallback(GpsStatus *status)
 {
-    qDebug() << Q_FUNC_INFO << status->status;
+    Q_UNUSED(status)
 }
 
 void svStatusCallback(GpsSvStatus *svStatus)
@@ -82,26 +95,28 @@ void svStatusCallback(GpsSvStatus *svStatus)
 
 void nmeaCallback(GpsUtcTime timestamp, const char *nmea, int length)
 {
-    qDebug() << Q_FUNC_INFO << timestamp << nmea << length;
+    Q_UNUSED(timestamp)
+    Q_UNUSED(nmea)
+    Q_UNUSED(length)
 }
 
 void setCapabilitiesCallback(uint32_t capabilities)
 {
-    qDebug() << Q_FUNC_INFO << hex << capabilities;
+    Q_UNUSED(capabilities)
 }
 
 void acquireWakelockCallback()
 {
-    qDebug() << Q_FUNC_INFO;
 }
 
 void releaseWakelockCallback()
 {
-    qDebug() << Q_FUNC_INFO;
 }
 
 pthread_t createThreadCallback(const char *name, void (*start)(void *), void *arg)
 {
+    Q_UNUSED(name)
+
     pthread_t threadId;
     pthread_attr_t attr;
 
@@ -116,44 +131,40 @@ pthread_t createThreadCallback(const char *name, void (*start)(void *), void *ar
 
 void requestUtcTimeCallback()
 {
-    qDebug() << Q_FUNC_INFO;
-}
-
-void networkLocationRequest(UlpNetworkRequestPos *req)
-{
-    qDebug() << Q_FUNC_INFO;
-}
-
-void requestPhoneContext(UlpPhoneContextRequest *req)
-{
-    qDebug() << Q_FUNC_INFO << req->context_type << req->request_type << req->interval_ms;
-    QMetaObject::invokeMethod(staticProvider, "requestPhoneContext",
-                              Q_ARG(UlpPhoneContextRequest *, req));
+    QMetaObject::invokeMethod(staticProvider, "injectUtcTime");
 }
 
 void agpsStatusCallback(AGpsStatus *status)
 {
-    qDebug() << Q_FUNC_INFO;
+    QHostAddress ipv4(status->ipv4_addr);
+    QHostAddress ipv6;
+    QByteArray ssid(status->ssid, SSID_BUF_SIZE);
+    QByteArray password(status->password, SSID_BUF_SIZE);
+
+    QMetaObject::invokeMethod(staticProvider, "agpsStatus", Q_ARG(qint16, status->type),
+                              Q_ARG(quint16, status->status), Q_ARG(QHostAddress, ipv4),
+                              Q_ARG(QHostAddress, ipv6), Q_ARG(QByteArray, ssid),
+                              Q_ARG(QByteArray, password));
 }
 
 void gpsNiNotifyCallback(GpsNiNotification *notification)
 {
-    qDebug() << Q_FUNC_INFO;
+    Q_UNUSED(notification)
 }
 
 void agpsRilRequestSetId(uint32_t flags)
 {
-    qDebug() << Q_FUNC_INFO << flags;
+    Q_UNUSED(flags)
 }
 
 void agpsRilRequestRefLoc(uint32_t flags)
 {
-    qDebug() << Q_FUNC_INFO << flags;
+    Q_UNUSED(flags)
 }
 
 void gpsXtraDownloadRequest()
 {
-    qDebug() << Q_FUNC_INFO;
+    QMetaObject::invokeMethod(staticProvider, "xtraDownloadRequest");
 }
 
 }
@@ -169,14 +180,6 @@ GpsCallbacks gpsCallbacks = {
   releaseWakelockCallback,
   createThreadCallback,
   requestUtcTimeCallback
-};
-
-UlpNetworkLocationCallbacks ulpNetworkCallbacks = {
-    networkLocationRequest
-};
-
-UlpPhoneContextCallbacks ulpPhoneContextCallbacks = {
-    requestPhoneContext
 };
 
 AGpsCallbacks agpsCallbacks = {
@@ -277,14 +280,15 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, QList<SatelliteIn
 }
 
 HybrisProvider::HybrisProvider(QObject *parent)
-:   QObject(parent), m_gps(0), m_ulpNetwork(0), m_ulpPhoneContext(0), m_agps(0), m_agpsril(0),
-    m_gpsni(0), m_xtra(0), m_status(StatusUnavailable), m_positionInjectionConnected(false)
+:   QObject(parent), m_gps(0), m_agps(0), m_agpsril(0), m_gpsni(0), m_xtra(0),
+    m_status(StatusUnavailable), m_positionInjectionConnected(false), m_xtraDownloadReply(0),
+    m_networkManager(new NetworkManager(this)), m_networkService(0), m_requestedConnect(false)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
 
-    qRegisterMetaType<UlpPhoneContextRequest *>();
     qRegisterMetaType<Location>();
+    qRegisterMetaType<QHostAddress>();
     qDBusRegisterMetaType<Accuracy>();
     qDBusRegisterMetaType<SatelliteInfo>();
     qDBusRegisterMetaType<QList<SatelliteInfo> >();
@@ -302,6 +306,8 @@ HybrisProvider::HybrisProvider(QObject *parent)
     new PositionAdaptor(this);
     new VelocityAdaptor(this);
     new SatelliteAdaptor(this);
+
+    m_manager = new QNetworkAccessManager(this);
 
     QDBusConnection connection = QDBusConnection::sessionBus();
 
@@ -343,22 +349,6 @@ HybrisProvider::HybrisProvider(QObject *parent)
         qWarning("Failed to initialise GPS interface, error %d\n", error);
         m_status = StatusError;
         return;
-    }
-
-    m_ulpNetwork = static_cast<const UlpNetworkInterface *>(m_gps->get_extension(ULP_NETWORK_INTERFACE));
-    if (m_ulpNetwork) {
-        qWarning("Initialising ULP Network Interface\n");
-        error = m_ulpNetwork->init(&ulpNetworkCallbacks);
-        if (error)
-            qWarning("ULP Network Interface init failed, error %d\n", error);
-    }
-
-    m_ulpPhoneContext = static_cast<const UlpPhoneContextInterface *>(m_gps->get_extension(ULP_PHONE_CONTEXT_INTERFACE));
-    if (m_ulpPhoneContext) {
-        qWarning("Initialising ULP Phone Context Interface\n");
-        error = m_ulpPhoneContext->init(&ulpPhoneContextCallbacks);
-        if (error)
-            qWarning("ULP Phone Context Interface init failed, error %d\n", error);
     }
 
     m_agps = static_cast<const AGpsInterface *>(m_gps->get_extension(AGPS_INTERFACE));
@@ -442,7 +432,7 @@ int HybrisProvider::GetStatus()
 
 void HybrisProvider::SetOptions(const QVariantMap &options)
 {
-    qDebug() << Q_FUNC_INFO << options;
+    Q_UNUSED(options)
 }
 
 int HybrisProvider::GetPosition(int &timestamp, double &latitude, double &longitude,
@@ -516,22 +506,6 @@ void HybrisProvider::timerEvent(QTimerEvent *event)
     }
 }
 
-void HybrisProvider::requestPhoneContext(UlpPhoneContextRequest *req)
-{
-    qDebug() << Q_FUNC_INFO;
-    m_settings.context_type = req->context_type;
-    m_settings.is_gps_enabled = true;
-    m_settings.is_network_position_available = false;
-    m_settings.is_wifi_setting_enabled = false;
-    m_settings.is_battery_charging = false;
-    m_settings.is_agps_enabled = false;
-    m_settings.is_enh_location_services_enabled = false;
-
-    int error = m_ulpPhoneContext->ulp_phone_context_settings_update(&m_settings);
-    if (error)
-        qWarning("ULP Phone Context Settings update failed, error %d", error);
-}
-
 void HybrisProvider::setLocation(const Location &location)
 {
     // Stop listening to all PositionChanged signals from org.freedesktop.Geoclue.Position
@@ -581,6 +555,9 @@ void HybrisProvider::locationEnabledChanged()
 void HybrisProvider::injectPosition(int fields, int timestamp, double latitude, double longitude,
                                     double altitude, const Accuracy &accuracy)
 {
+    Q_UNUSED(timestamp)
+    Q_UNUSED(altitude)
+
     PositionFields positionFields = static_cast<PositionFields>(fields);
     if (!(positionFields & LatitudePresent && positionFields & LongitudePresent))
         return;
@@ -592,6 +569,110 @@ void HybrisProvider::injectUtcTime()
 {
     qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
     m_gps->inject_time(currentTime, currentTime, 0);
+}
+
+void HybrisProvider::xtraDownloadRequest()
+{
+    if (m_xtraDownloadReply)
+        return;
+
+    QNetworkRequest request(QUrl(QStringLiteral("http://xtra1.gpsonextra.net/xtra.bin")));
+    m_xtraDownloadReply = m_manager->get(request);
+    connect(m_xtraDownloadReply, SIGNAL(finished()), this, SLOT(xtraDownloadFinished()));
+    connect(m_xtraDownloadReply, SIGNAL(error(QNetworkReply::NetworkError)),
+            this, SLOT(xtraDownloadFailed(QNetworkReply::NetworkError)));
+}
+
+void HybrisProvider::xtraDownloadFailed(QNetworkReply::NetworkError error)
+{
+    Q_UNUSED(error)
+
+    m_xtraDownloadReply->deleteLater();
+    m_xtraDownloadReply = 0;
+}
+
+void HybrisProvider::xtraDownloadFinished()
+{
+    QByteArray xtraData = m_xtraDownloadReply->readAll();
+    m_xtra->inject_xtra_data(xtraData.data(), xtraData.length());
+}
+
+void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress &ipv4,
+                                const QHostAddress &ipv6, const QByteArray &ssid,
+                                const QByteArray &password)
+{
+    Q_UNUSED(ipv4)
+    Q_UNUSED(ipv6)
+    Q_UNUSED(ssid)
+    Q_UNUSED(password)
+
+    if (type != AGPS_TYPE_SUPL) {
+        qWarning("Only SUPL AGPS is supported.");
+        return;
+    }
+
+    switch (status) {
+    case GPS_REQUEST_AGPS_DATA_CONN:
+        startDataConnection();
+        break;
+    case GPS_RELEASE_AGPS_DATA_CONN:
+        // Immediately inform that connection is closed.
+        m_agps->data_conn_closed(AGPS_TYPE_SUPL);
+        stopDataConnection();
+        break;
+    case GPS_AGPS_DATA_CONNECTED:
+        break;
+    case GPS_AGPS_DATA_CONN_DONE:
+        break;
+    case GPS_AGPS_DATA_CONN_FAILED:
+        break;
+    default:
+        qWarning("Unknown AGPS Status.");
+    }
+}
+
+void HybrisProvider::dataServiceConnectedChanged(bool connected)
+{
+    if (!connected)
+        return;
+
+    const QString interface =
+        m_networkService->ethernet().value(QStringLiteral("Interface")).toString();
+    if (interface.isEmpty()) {
+        qWarning("Network service does not have a network interface associated with it.");
+        return;
+    }
+
+    QOfonoManager ofonoManager;
+    if (!ofonoManager.available()) {
+        qWarning("Ofono not available.");
+        return;
+    }
+
+    QStringList modems = ofonoManager.modems();
+    if (modems.isEmpty()) {
+        qWarning("No modems found.");
+        return;
+    }
+
+    QOfonoConnectionManager ofonoConnectionManager;
+    ofonoConnectionManager.setModemPath(modems.first());
+    QStringList contexts = ofonoConnectionManager.contexts();
+    QOfonoConnectionContext connectionContext;
+    foreach (const QString &context, contexts) {
+        // Find the APN of the connection context associated with the network session.
+        connectionContext.setContextPath(context);
+        if (connectionContext.settings().value(QStringLiteral("Interface")) == interface) {
+            const QByteArray apn = connectionContext.accessPointName().toLocal8Bit();
+            m_agps->data_conn_open(AGPS_TYPE_SUPL, apn.constData(), AGPS_APN_BEARER_IPV4);
+            break;
+        }
+    }
+}
+
+void HybrisProvider::networkServiceDestroyed()
+{
+    m_networkService = 0;
 }
 
 void HybrisProvider::emitLocationChanged()
@@ -660,7 +741,7 @@ void HybrisProvider::startPositioningIfNeeded()
                          this, SLOT(injectPosition(int,int,double,double,double,Accuracy)));
     }
 
-    int error = m_gps->set_position_mode(GPS_POSITION_MODE_STANDALONE,
+    int error = m_gps->set_position_mode(GPS_POSITION_MODE_MS_BASED,
                                          GPS_POSITION_RECURRENCE_PERIODIC, MinimumInterval,
                                          PreferredAccuracy, PreferredInitialFixTime);
     if (error) {
@@ -691,7 +772,6 @@ void HybrisProvider::stopPositioningIfNeeded()
     // Positioning enabled externally and positioning is still being used.
     if (positioningEnabled() && !m_watchedServices.isEmpty())
         return;
-    }
 
     // Stop listening to all PositionChanged signals from org.freedesktop.Geoclue.Position
     // interfaces.
@@ -735,4 +815,39 @@ bool HybrisProvider::positioningEnabled()
     bool flightMode = m_flightMode->value(false).toBool();
 
     return enabled && !flightMode;
+}
+
+void HybrisProvider::startDataConnection()
+{
+    if (!m_networkService) {
+        QVector<NetworkService *> services = m_networkManager->getServices(QStringLiteral("cellular"));
+        if (!services.isEmpty()) {
+            m_networkService = services.first();
+            connect(m_networkService, SIGNAL(connectedChanged(bool)),
+                    this, SLOT(dataServiceConnectedChanged(bool)));
+            connect(m_networkService, SIGNAL(destroyed()), this, SLOT(networkServiceDestroyed()));
+        }
+    }
+
+    if (!m_networkService) {
+        m_agps->data_conn_failed(AGPS_TYPE_SUPL);
+        return;
+    }
+
+    if (!m_networkService->connected()) {
+        m_requestedConnect = true;
+        m_networkService->requestConnect();
+        return;
+    }
+
+    // Data connection already available, tell GPS stack.
+    dataServiceConnectedChanged(true);
+}
+
+void HybrisProvider::stopDataConnection()
+{
+    if (m_networkService && m_networkService->connected() && m_requestedConnect) {
+        m_requestedConnect = false;
+        m_networkService->requestDisconnect();
+    }
 }
