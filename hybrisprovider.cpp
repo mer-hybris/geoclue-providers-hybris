@@ -275,7 +275,7 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, QList<SatelliteIn
 
 HybrisProvider::HybrisProvider(QObject *parent)
 :   QObject(parent), m_gps(0), m_ulpNetwork(0), m_ulpPhoneContext(0), m_agps(0), m_agpsril(0),
-    m_gpsni(0), m_xtra(0), m_status(StatusAcquiring)
+    m_gpsni(0), m_xtra(0), m_status(StatusUnavailable)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -320,11 +320,16 @@ HybrisProvider::HybrisProvider(QObject *parent)
     }
 
     m_gps = m_gpsDevice->get_gps_interface(m_gpsDevice);
+    if (!m_gps) {
+        m_status = StatusError;
+        return;
+    }
 
     qWarning("Initialising GPS interface\n");
     error = m_gps->init(&gpsCallbacks);
     if (error) {
         qWarning("Failed to initialise GPS interface, error %d\n", error);
+        m_status = StatusError;
         return;
     }
 
@@ -371,14 +376,12 @@ HybrisProvider::HybrisProvider(QObject *parent)
     }
 
     m_debug = static_cast<const GpsDebugInterface *>(m_gps->get_extension(GPS_DEBUG_INTERFACE));
-
-    if (!m_gps)
-        m_status = StatusUnavailable;
 }
 
 HybrisProvider::~HybrisProvider()
 {
-    m_gps->cleanup();
+    if (m_gps)
+        m_gps->cleanup();
 
     if (m_gpsDevice->common.close)
         m_gpsDevice->common.close(reinterpret_cast<hw_device_t *>(m_gpsDevice));
@@ -587,19 +590,26 @@ void HybrisProvider::startPositioningIfNeeded()
         m_idleTimer = -1;
     }
 
+    if (!m_gps)
+        return;
+
     int error = m_gps->set_position_mode(GPS_POSITION_MODE_STANDALONE,
                                          GPS_POSITION_RECURRENCE_PERIODIC, MinimumInterval,
                                          PreferredAccuracy, PreferredInitialFixTime);
     if (error) {
         qWarning("Failed to set position mode, error %d\n", error);
+        setStatus(StatusError);
         return;
     }
 
     error = m_gps->start();
     if (error) {
         qWarning("Failed to start positioning, error %d\n", error);
+        setStatus(StatusError);
         return;
     }
+
+    setStatus(StatusAcquiring);
 }
 
 void HybrisProvider::stopPositioningIfNeeded()
@@ -607,9 +617,13 @@ void HybrisProvider::stopPositioningIfNeeded()
     if (!m_watchedServices.isEmpty())
         return;
 
-    int error = m_gps->stop();
-    if (error)
-        qWarning("Failed to stop positioning, error %d\n", error);
+    if (m_gps) {
+        int error = m_gps->stop();
+        if (error)
+            qWarning("Failed to stop positioning, error %d\n", error);
+
+        setStatus(StatusUnavailable);
+    }
 
     m_idleTimer = startTimer(QuitIdleTime);
 }
