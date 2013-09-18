@@ -9,6 +9,8 @@
 #include "velocity_adaptor.h"
 #include "satellite_adaptor.h"
 
+#include <mlite5/MGConfItem>
+
 namespace
 {
 
@@ -288,6 +290,9 @@ HybrisProvider::HybrisProvider(QObject *parent)
 
     staticProvider = this;
 
+    m_locationEnabled = new MGConfItem(QStringLiteral("/jolla/location/enabled"), this);
+    connect(m_locationEnabled, SIGNAL(valueChanged()), this, SLOT(locationEnabledChanged()));
+
     new GeoclueAdaptor(this);
     new PositionAdaptor(this);
     new VelocityAdaptor(this);
@@ -546,6 +551,17 @@ void HybrisProvider::serviceUnregistered(const QString &service)
     stopPositioningIfNeeded();
 }
 
+void HybrisProvider::locationEnabledChanged()
+{
+    bool enabled = m_locationEnabled->value(false).toBool();
+    if (enabled) {
+        startPositioningIfNeeded();
+    } else {
+        setLocation(Location());
+        stopPositioningIfNeeded();
+    }
+}
+
 void HybrisProvider::emitLocationChanged()
 {
     PositionFields positionFields = NoPositionFields;
@@ -582,7 +598,16 @@ void HybrisProvider::emitSatelliteChanged()
 
 void HybrisProvider::startPositioningIfNeeded()
 {
-    if (m_watchedServices.length() != 1)
+    // Positioning is already started.
+    if (m_status == StatusAcquiring || m_status == StatusAvailable)
+        return;
+
+    // Positioning is unused.
+    if (m_watchedServices.isEmpty())
+        return;
+
+    // Positioning is disabled.
+    if (!m_locationEnabled->value(false).toBool())
         return;
 
     if (m_idleTimer != -1) {
@@ -614,7 +639,12 @@ void HybrisProvider::startPositioningIfNeeded()
 
 void HybrisProvider::stopPositioningIfNeeded()
 {
-    if (!m_watchedServices.isEmpty())
+    // Positioning is already stopped.
+    if (m_status == StatusError || m_status == StatusUnavailable)
+        return;
+
+    // Positioning is enabled, and positioning is still being used.
+    if (m_locationEnabled->value(false).toBool() && !m_watchedServices.isEmpty())
         return;
 
     if (m_gps) {
@@ -625,7 +655,8 @@ void HybrisProvider::stopPositioningIfNeeded()
         setStatus(StatusUnavailable);
     }
 
-    m_idleTimer = startTimer(QuitIdleTime);
+    if (m_watchedServices.isEmpty())
+        m_idleTimer = startTimer(QuitIdleTime);
 }
 
 void HybrisProvider::setStatus(HybrisProvider::Status status)

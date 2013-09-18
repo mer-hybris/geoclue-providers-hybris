@@ -15,6 +15,7 @@
 #include "locationtypes.h"
 
 QT_FORWARD_DECLARE_CLASS(QDBusServiceWatcher)
+class MGConfItem;
 
 class HybrisProvider : public QObject, public QDBusContext
 {
@@ -94,6 +95,7 @@ private slots:
     void setLocation(const Location &location);
     void setSatellite(const QList<SatelliteInfo> &satellites, const QList<int> &used);
     void serviceUnregistered(const QString &service);
+    void locationEnabledChanged();
 
 private:
     void emitLocationChanged();
@@ -132,6 +134,8 @@ private:
 
     int m_idleTimer;
     Status m_status;
+
+    MGConfItem *m_locationEnabled;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)
