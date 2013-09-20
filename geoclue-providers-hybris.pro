@@ -8,7 +8,7 @@ target.path = /usr/libexec
 QT = core dbus
 
 CONFIG += link_pkgconfig
-PKGCONFIG += libhardware android-headers mlite5
+PKGCONFIG += libhardware android-headers mlite5 contextkit-statefs
 
 DBUS_ADAPTORS = \
     org.freedesktop.Geoclue.xml \

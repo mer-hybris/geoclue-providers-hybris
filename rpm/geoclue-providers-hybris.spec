@@ -11,6 +11,7 @@ BuildRequires: pkgconfig(Qt5DBus)
 BuildRequires: pkgconfig(libhardware)
 BuildRequires: pkgconfig(android-headers)
 BuildRequires: pkgconfig(mlite5)
+BuildRequires: pkgconfig(contextkit-statefs)
 
 %description
 %{summary}.

@@ -10,6 +10,7 @@
 #include "satellite_adaptor.h"
 
 #include <mlite5/MGConfItem>
+#include <contextproperty.h>
 
 namespace
 {
@@ -293,6 +294,10 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_locationEnabled = new MGConfItem(QStringLiteral("/jolla/location/enabled"), this);
     connect(m_locationEnabled, SIGNAL(valueChanged()), this, SLOT(locationEnabledChanged()));
 
+    m_flightMode = new ContextProperty(QStringLiteral("System.OfflineMode"), this);
+    m_flightMode->subscribe();
+    connect(m_flightMode, SIGNAL(valueChanged()), this, SLOT(flightModeChanged()));
+
     new GeoclueAdaptor(this);
     new PositionAdaptor(this);
     new VelocityAdaptor(this);
@@ -574,6 +579,17 @@ void HybrisProvider::locationEnabledChanged()
     }
 }
 
+void HybrisProvider::flightModeChanged()
+{
+    bool flightMode = m_flightMode->value(false).toBool();
+    if (!flightMode) {
+        startPositioningIfNeeded();
+    } else {
+        setLocation(Location());
+        stopPositioningIfNeeded();
+    }
+}
+
 void HybrisProvider::injectPosition(int fields, int timestamp, double latitude, double longitude,
                                     double altitude, const Accuracy &accuracy)
 {
@@ -634,6 +650,10 @@ void HybrisProvider::startPositioningIfNeeded()
     if (m_watchedServices.isEmpty())
         return;
 
+    // Flight mode is enabled
+    if (m_flightMode->value(false).toBool())
+        return;
+
     // Positioning is disabled.
     if (!m_locationEnabled->value(false).toBool())
         return;
@@ -684,9 +704,11 @@ void HybrisProvider::stopPositioningIfNeeded()
     if (m_status == StatusError || m_status == StatusUnavailable)
         return;
 
-    // Positioning is enabled, and positioning is still being used.
-    if (m_locationEnabled->value(false).toBool() && !m_watchedServices.isEmpty())
+    // Not in flight mode and positioning is enabled, and positioning is still being used.
+    if (!m_flightMode->value(false).toBool() && m_locationEnabled->value(false).toBool() &&
+        !m_watchedServices.isEmpty()) {
         return;
+    }
 
     // Stop listening to all PositionChanged signals from org.freedesktop.Geoclue.Position
     // interfaces.

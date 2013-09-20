@@ -16,6 +16,7 @@
 
 QT_FORWARD_DECLARE_CLASS(QDBusServiceWatcher)
 class MGConfItem;
+class ContextProperty;
 
 class HybrisProvider : public QObject, public QDBusContext
 {
@@ -96,6 +97,7 @@ private slots:
     void setSatellite(const QList<SatelliteInfo> &satellites, const QList<int> &used);
     void serviceUnregistered(const QString &service);
     void locationEnabledChanged();
+    void flightModeChanged();
     void injectPosition(int fields, int timestamp, double latitude, double longitude,
                         double altitude, const Accuracy &accuracy);
     void injectUtcTime();
@@ -141,6 +143,8 @@ private:
     MGConfItem *m_locationEnabled;
 
     bool m_positionInjectionConnected;
+
+    ContextProperty *m_flightMode;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)
