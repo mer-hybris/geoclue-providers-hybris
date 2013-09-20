@@ -584,6 +584,12 @@ void HybrisProvider::injectPosition(int fields, int timestamp, double latitude, 
     m_gps->inject_location(latitude, longitude, accuracy.horizontal());
 }
 
+void HybrisProvider::injectUtcTime()
+{
+    qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+    m_gps->inject_time(currentTime, currentTime, 0);
+}
+
 void HybrisProvider::emitLocationChanged()
 {
     PositionFields positionFields = NoPositionFields;
@@ -658,6 +664,9 @@ void HybrisProvider::startPositioningIfNeeded()
         setStatus(StatusError);
         return;
     }
+
+    // Assist GPS by injecting current time.
+    injectUtcTime();
 
     error = m_gps->start();
     if (error) {

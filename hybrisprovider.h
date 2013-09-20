@@ -98,6 +98,7 @@ private slots:
     void locationEnabledChanged();
     void injectPosition(int fields, int timestamp, double latitude, double longitude,
                         double altitude, const Accuracy &accuracy);
+    void injectUtcTime();
 
 private:
     void emitLocationChanged();
