@@ -96,6 +96,8 @@ private slots:
     void setSatellite(const QList<SatelliteInfo> &satellites, const QList<int> &used);
     void serviceUnregistered(const QString &service);
     void locationEnabledChanged();
+    void injectPosition(int fields, int timestamp, double latitude, double longitude,
+                        double altitude, const Accuracy &accuracy);
 
 private:
     void emitLocationChanged();
@@ -136,6 +138,8 @@ private:
     Status m_status;
 
     MGConfItem *m_locationEnabled;
+
+    bool m_positionInjectionConnected;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)

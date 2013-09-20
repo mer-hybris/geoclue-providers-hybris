@@ -277,7 +277,7 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, QList<SatelliteIn
 
 HybrisProvider::HybrisProvider(QObject *parent)
 :   QObject(parent), m_gps(0), m_ulpNetwork(0), m_ulpPhoneContext(0), m_agps(0), m_agpsril(0),
-    m_gpsni(0), m_xtra(0), m_status(StatusUnavailable)
+    m_gpsni(0), m_xtra(0), m_status(StatusUnavailable), m_positionInjectionConnected(false)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -298,8 +298,10 @@ HybrisProvider::HybrisProvider(QObject *parent)
     new VelocityAdaptor(this);
     new SatelliteAdaptor(this);
 
+    QDBusConnection connection = QDBusConnection::sessionBus();
+
     m_watcher = new QDBusServiceWatcher(this);
-    m_watcher->setConnection(QDBusConnection::sessionBus());
+    m_watcher->setConnection(connection);
     m_watcher->setWatchMode(QDBusServiceWatcher::WatchForUnregistration);
     connect(m_watcher, SIGNAL(serviceUnregistered(QString)),
             this, SLOT(serviceUnregistered(QString)));
@@ -527,6 +529,16 @@ void HybrisProvider::requestPhoneContext(UlpPhoneContextRequest *req)
 
 void HybrisProvider::setLocation(const Location &location)
 {
+    // Stop listening to all PositionChanged signals from org.freedesktop.Geoclue.Position
+    // interfaces.
+    if (m_positionInjectionConnected) {
+        QDBusConnection conn = QDBusConnection::sessionBus();
+        conn.disconnect(QString(), QString(), QStringLiteral("org.freedesktop.Geoclue.Position"),
+                        QStringLiteral("PositionChanged"),
+                        this, SLOT(injectPosition(int,int,double,double,double,Accuracy)));
+        m_positionInjectionConnected = false;
+    }
+
     setStatus(StatusAvailable);
     m_currentLocation = location;
     emitLocationChanged();
@@ -560,6 +572,16 @@ void HybrisProvider::locationEnabledChanged()
         setLocation(Location());
         stopPositioningIfNeeded();
     }
+}
+
+void HybrisProvider::injectPosition(int fields, int timestamp, double latitude, double longitude,
+                                    double altitude, const Accuracy &accuracy)
+{
+    PositionFields positionFields = static_cast<PositionFields>(fields);
+    if (!(positionFields & LatitudePresent && positionFields & LongitudePresent))
+        return;
+
+    m_gps->inject_location(latitude, longitude, accuracy.horizontal());
 }
 
 void HybrisProvider::emitLocationChanged()
@@ -618,6 +640,16 @@ void HybrisProvider::startPositioningIfNeeded()
     if (!m_gps)
         return;
 
+    // Listen to all PositionChanged signals from org.freedesktop.Geoclue.Position interfaces. Used
+    // to inject the current position to achieve a faster fix.
+    if (!m_positionInjectionConnected) {
+        QDBusConnection conn = QDBusConnection::sessionBus();
+        m_positionInjectionConnected =
+            conn.connect(QString(), QString(), QStringLiteral("org.freedesktop.Geoclue.Position"),
+                         QStringLiteral("PositionChanged"),
+                         this, SLOT(injectPosition(int,int,double,double,double,Accuracy)));
+    }
+
     int error = m_gps->set_position_mode(GPS_POSITION_MODE_STANDALONE,
                                          GPS_POSITION_RECURRENCE_PERIODIC, MinimumInterval,
                                          PreferredAccuracy, PreferredInitialFixTime);
@@ -646,6 +678,16 @@ void HybrisProvider::stopPositioningIfNeeded()
     // Positioning is enabled, and positioning is still being used.
     if (m_locationEnabled->value(false).toBool() && !m_watchedServices.isEmpty())
         return;
+
+    // Stop listening to all PositionChanged signals from org.freedesktop.Geoclue.Position
+    // interfaces.
+    if (m_positionInjectionConnected) {
+        QDBusConnection conn = QDBusConnection::sessionBus();
+        conn.disconnect(QString(), QString(), QStringLiteral("org.freedesktop.Geoclue.Position"),
+                        QStringLiteral("PositionChanged"),
+                        this, SLOT(injectPosition(int,int,double,double,double,Accuracy)));
+        m_positionInjectionConnected = false;
+    }
 
     if (m_gps) {
         int error = m_gps->stop();
