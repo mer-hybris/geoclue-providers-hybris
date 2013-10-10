@@ -296,7 +296,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
 
     m_flightMode = new ContextProperty(QStringLiteral("System.OfflineMode"), this);
     m_flightMode->subscribe();
-    connect(m_flightMode, SIGNAL(valueChanged()), this, SLOT(flightModeChanged()));
+    connect(m_flightMode, SIGNAL(valueChanged()), this, SLOT(locationEnabledChanged()));
 
     new GeoclueAdaptor(this);
     new PositionAdaptor(this);
@@ -570,19 +570,7 @@ void HybrisProvider::serviceUnregistered(const QString &service)
 
 void HybrisProvider::locationEnabledChanged()
 {
-    bool enabled = m_locationEnabled->value(false).toBool();
-    if (enabled) {
-        startPositioningIfNeeded();
-    } else {
-        setLocation(Location());
-        stopPositioningIfNeeded();
-    }
-}
-
-void HybrisProvider::flightModeChanged()
-{
-    bool flightMode = m_flightMode->value(false).toBool();
-    if (!flightMode) {
+    if (positioningEnabled()) {
         startPositioningIfNeeded();
     } else {
         setLocation(Location());
@@ -650,12 +638,8 @@ void HybrisProvider::startPositioningIfNeeded()
     if (m_watchedServices.isEmpty())
         return;
 
-    // Flight mode is enabled
-    if (m_flightMode->value(false).toBool())
-        return;
-
-    // Positioning is disabled.
-    if (!m_locationEnabled->value(false).toBool())
+    // Positioning disabled externally
+    if (!positioningEnabled())
         return;
 
     if (m_idleTimer != -1) {
@@ -704,9 +688,8 @@ void HybrisProvider::stopPositioningIfNeeded()
     if (m_status == StatusError || m_status == StatusUnavailable)
         return;
 
-    // Not in flight mode and positioning is enabled, and positioning is still being used.
-    if (!m_flightMode->value(false).toBool() && m_locationEnabled->value(false).toBool() &&
-        !m_watchedServices.isEmpty()) {
+    // Positioning enabled externally and positioning is still being used.
+    if (positioningEnabled() && !m_watchedServices.isEmpty())
         return;
     }
 
@@ -739,4 +722,17 @@ void HybrisProvider::setStatus(HybrisProvider::Status status)
 
     m_status = status;
     emit StatusChanged(m_status);
+}
+
+/*
+    Returns true if positioning is enabled, otherwise returns false.
+
+    Currently checks the state of the Location enabled setting and flight mode.
+*/
+bool HybrisProvider::positioningEnabled()
+{
+    bool enabled = m_locationEnabled->value(false).toBool();
+    bool flightMode = m_flightMode->value(false).toBool();
+
+    return enabled && !flightMode;
 }

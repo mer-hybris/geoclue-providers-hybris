@@ -97,7 +97,6 @@ private slots:
     void setSatellite(const QList<SatelliteInfo> &satellites, const QList<int> &used);
     void serviceUnregistered(const QString &service);
     void locationEnabledChanged();
-    void flightModeChanged();
     void injectPosition(int fields, int timestamp, double latitude, double longitude,
                         double altitude, const Accuracy &accuracy);
     void injectUtcTime();
@@ -108,6 +107,7 @@ private:
     void startPositioningIfNeeded();
     void stopPositioningIfNeeded();
     void setStatus(Status status);
+    bool positioningEnabled();
 
     gps_device_t *m_gpsDevice;
 
