@@ -8,10 +8,13 @@ License: Proprietary
 Source: %{name}-%{version}.tar.gz
 BuildRequires: pkgconfig(Qt5Core)
 BuildRequires: pkgconfig(Qt5DBus)
+BuildRequires: pkgconfig(Qt5Network)
 BuildRequires: pkgconfig(libhardware)
 BuildRequires: pkgconfig(android-headers)
 BuildRequires: pkgconfig(mlite5)
 BuildRequires: pkgconfig(contextkit-statefs)
+BuildRequires: pkgconfig(connman-qt5)
+BuildRequires: pkgconfig(qofono-qt5)
 
 %description
 %{summary}.
