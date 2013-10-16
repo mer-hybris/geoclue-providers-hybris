@@ -34,8 +34,9 @@ make INSTALL_ROOT=%{buildroot} install
 %postun -p /sbin/ldconfig
 
 %files
-%defattr(-,root,root,-)
+%defattr(04755,root,root,-)
 %{_libexecdir}/geoclue-hybris
+%defattr(-,root,root,-)
 %{_datadir}/dbus-1/services/org.freedesktop.Geoclue.Providers.Hybris.service
 %{_datadir}/geoclue-providers/geoclue-hybris.provider
 
