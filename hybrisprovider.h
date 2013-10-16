@@ -9,14 +9,19 @@
 #include <QtCore/QObject>
 #include <QtCore/QStringList>
 #include <QtDBus/QDBusContext>
+#include <QtNetwork/QNetworkReply>
 
 #include <android/hardware/gps.h>
 
 #include "locationtypes.h"
 
 QT_FORWARD_DECLARE_CLASS(QDBusServiceWatcher)
+QT_FORWARD_DECLARE_CLASS(QNetworkAccessManager)
+QT_FORWARD_DECLARE_CLASS(QHostAddress)
 class MGConfItem;
 class ContextProperty;
+class NetworkManager;
+class NetworkService;
 
 class HybrisProvider : public QObject, public QDBusContext
 {
@@ -92,15 +97,20 @@ protected:
     void timerEvent(QTimerEvent *event);
 
 private slots:
-    void requestPhoneContext(UlpPhoneContextRequest *req);
     void setLocation(const Location &location);
     void setSatellite(const QList<SatelliteInfo> &satellites, const QList<int> &used);
     void serviceUnregistered(const QString &service);
     void locationEnabledChanged();
-    void flightModeChanged();
     void injectPosition(int fields, int timestamp, double latitude, double longitude,
                         double altitude, const Accuracy &accuracy);
     void injectUtcTime();
+    void xtraDownloadRequest();
+    void xtraDownloadFailed(QNetworkReply::NetworkError error);
+    void xtraDownloadFinished();
+    void agpsStatus(qint16 type, quint16 status, const QHostAddress &ipv4,
+                    const QHostAddress &ipv6, const QByteArray &ssid, const QByteArray &password);
+    void dataServiceConnectedChanged(bool connected);
+    void networkServiceDestroyed();
 
 private:
     void emitLocationChanged();
@@ -108,12 +118,14 @@ private:
     void startPositioningIfNeeded();
     void stopPositioningIfNeeded();
     void setStatus(Status status);
+    bool positioningEnabled();
+
+    void startDataConnection();
+    void stopDataConnection();
 
     gps_device_t *m_gpsDevice;
 
     const GpsInterface *m_gps;
-    const UlpNetworkInterface *m_ulpNetwork;
-    const UlpPhoneContextInterface *m_ulpPhoneContext;
 
     const AGpsInterface *m_agps;
     const AGpsRilInterface *m_agpsril;
@@ -121,8 +133,6 @@ private:
     const GpsXtraInterface *m_xtra;
 
     const GpsDebugInterface *m_debug;
-
-    UlpPhoneContextSettings m_settings;
 
     Location m_currentLocation;
 
@@ -145,11 +155,16 @@ private:
     bool m_positionInjectionConnected;
 
     ContextProperty *m_flightMode;
+
+    QNetworkAccessManager *m_manager;
+    QNetworkReply *m_xtraDownloadReply;
+
+    NetworkManager *m_networkManager;
+    NetworkService *m_networkService;
+    bool m_requestedConnect;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::VelocityFields)
-
-Q_DECLARE_METATYPE(UlpPhoneContextRequest *)
 
 #endif // HYBRISPROVIDER_H

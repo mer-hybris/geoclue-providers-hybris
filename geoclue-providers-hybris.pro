@@ -5,10 +5,10 @@ TEMPLATE = app
 
 target.path = /usr/libexec
 
-QT = core dbus
+QT = core dbus network
 
 CONFIG += link_pkgconfig
-PKGCONFIG += libhardware android-headers mlite5 contextkit-statefs
+PKGCONFIG += libhardware android-headers mlite5 contextkit-statefs connman-qt5 qofono-qt5
 
 DBUS_ADAPTORS = \
     org.freedesktop.Geoclue.xml \
