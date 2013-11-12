@@ -19,6 +19,8 @@
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QUdpSocket>
 #include <QtNetwork/QHostInfo>
+#include <QtDBus/QDBusMessage>
+#include <QtDBus/QDBusConnection>
 
 #include <networkmanager.h>
 #include <networkservice.h>
@@ -31,9 +33,6 @@
 #include <sys/time.h>
 
 #include <android-version.h>
-
-#include <QDBusMessage>
-#include <QDBusConnection>
 
 Q_DECLARE_METATYPE(QHostAddress)
 
@@ -370,7 +369,8 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_requestedConnect(false), m_gpsStarted(false), m_deviceControl(0),
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(0),
     m_ofonoManager(new QOfonoManager(this)),
-    m_connectionManager(new QOfonoConnectionManager(this)), m_ntpSocket(0), m_hereEnabled(false)
+    m_connectionManager(new QOfonoConnectionManager(this)), m_ntpSocket(0), m_hereEnabled(false),
+    m_magneticVariation(0)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
