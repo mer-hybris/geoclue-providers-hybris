@@ -440,7 +440,7 @@ int HybrisProvider::GetPosition(int &timestamp, double &latitude, double &longit
 {
     PositionFields positionFields = NoPositionFields;
 
-    timestamp = m_currentLocation.timestamp();
+    timestamp = m_currentLocation.timestamp() / 1000;
     if (!qIsNaN(m_currentLocation.latitude()))
         positionFields |= LatitudePresent;
     latitude = m_currentLocation.latitude();
@@ -459,7 +459,7 @@ int HybrisProvider::GetVelocity(int &timestamp, double &speed, double &direction
 {
     VelocityFields velocityFields = NoVelocityFields;
 
-    timestamp = m_currentLocation.timestamp();
+    timestamp = m_currentLocation.timestamp() / 1000;
     if (!qIsNaN(m_currentLocation.speed()))
         velocityFields |= SpeedPresent;
     speed = m_currentLocation.speed();
@@ -695,12 +695,13 @@ void HybrisProvider::emitLocationChanged()
     if (!qIsNaN(m_currentLocation.climb()))
         velocityFields |= ClimbPresent;
 
-    emit PositionChanged(positionFields, m_currentLocation.timestamp(),
+    emit PositionChanged(positionFields, m_currentLocation.timestamp() / 1000,
                          m_currentLocation.latitude(), m_currentLocation.longitude(),
                          m_currentLocation.altitude(), m_currentLocation.accuracy());
 
-    emit VelocityChanged(velocityFields, m_currentLocation.timestamp(), m_currentLocation.speed(),
-                         m_currentLocation.direction(), m_currentLocation.climb());
+    emit VelocityChanged(velocityFields, m_currentLocation.timestamp() / 1000,
+                         m_currentLocation.speed(), m_currentLocation.direction(),
+                         m_currentLocation.climb());
 }
 
 void HybrisProvider::emitSatelliteChanged()
