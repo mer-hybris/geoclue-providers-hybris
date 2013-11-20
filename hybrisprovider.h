@@ -15,10 +15,10 @@
 
 #include "locationtypes.h"
 
+QT_FORWARD_DECLARE_CLASS(QFileSystemWatcher)
 QT_FORWARD_DECLARE_CLASS(QDBusServiceWatcher)
 QT_FORWARD_DECLARE_CLASS(QNetworkAccessManager)
 QT_FORWARD_DECLARE_CLASS(QHostAddress)
-class MGConfItem;
 class ContextProperty;
 class NetworkManager;
 class NetworkService;
@@ -150,11 +150,11 @@ private:
     int m_idleTimer;
     Status m_status;
 
-    MGConfItem *m_locationEnabled;
+    QFileSystemWatcher *m_locationSettings;
+    ContextProperty *m_flightMode;
 
     bool m_positionInjectionConnected;
 
-    ContextProperty *m_flightMode;
 
     QNetworkAccessManager *m_manager;
     QNetworkReply *m_xtraDownloadReply;
