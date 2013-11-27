@@ -34,6 +34,7 @@ const int QuitIdleTime = 30000;
 const quint32 MinimumInterval = 1000;
 const quint32 PreferredAccuracy = 0;
 const quint32 PreferredInitialFixTime = 0;
+const double KnotsToMps = 0.514444;
 
 void locationCallback(GpsLocation *location)
 {
@@ -50,7 +51,7 @@ void locationCallback(GpsLocation *location)
         loc.setAltitude(location->altitude);
 
     if (location->flags & GPS_LOCATION_HAS_SPEED)
-        loc.setSpeed(location->speed);
+        loc.setSpeed(location->speed / KnotsToMps);
 
     if (location->flags & GPS_LOCATION_HAS_BEARING)
         loc.setDirection(location->bearing);
@@ -695,13 +696,13 @@ void HybrisProvider::emitLocationChanged()
     if (!qIsNaN(m_currentLocation.climb()))
         velocityFields |= ClimbPresent;
 
-    emit PositionChanged(positionFields, m_currentLocation.timestamp() / 1000,
-                         m_currentLocation.latitude(), m_currentLocation.longitude(),
-                         m_currentLocation.altitude(), m_currentLocation.accuracy());
-
     emit VelocityChanged(velocityFields, m_currentLocation.timestamp() / 1000,
                          m_currentLocation.speed(), m_currentLocation.direction(),
                          m_currentLocation.climb());
+
+    emit PositionChanged(positionFields, m_currentLocation.timestamp() / 1000,
+                         m_currentLocation.latitude(), m_currentLocation.longitude(),
+                         m_currentLocation.altitude(), m_currentLocation.accuracy());
 }
 
 void HybrisProvider::emitSatelliteChanged()
