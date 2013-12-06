@@ -20,7 +20,6 @@
 #include <qofonoconnectionmanager.h>
 #include <qofonoconnectioncontext.h>
 
-#include <mlite5/MGConfItem>
 #include <contextproperty.h>
 
 Q_DECLARE_METATYPE(QHostAddress)
@@ -35,6 +34,8 @@ const quint32 MinimumInterval = 1000;
 const quint32 PreferredAccuracy = 0;
 const quint32 PreferredInitialFixTime = 0;
 const double KnotsToMps = 0.514444;
+
+const QString LocationSettingsFile = QStringLiteral("/etc/location/location.conf");
 
 void locationCallback(GpsLocation *location)
 {
@@ -296,8 +297,10 @@ HybrisProvider::HybrisProvider(QObject *parent)
 
     staticProvider = this;
 
-    m_locationEnabled = new MGConfItem(QStringLiteral("/jolla/location/enabled"), this);
-    connect(m_locationEnabled, SIGNAL(valueChanged()), this, SLOT(locationEnabledChanged()));
+    m_locationSettings = new QFileSystemWatcher(this);
+    connect(m_locationSettings, SIGNAL(fileChanged(QString)),
+            this, SLOT(locationEnabledChanged()));
+    m_locationSettings->addPath(LocationSettingsFile);
 
     m_flightMode = new ContextProperty(QStringLiteral("System.OfflineMode"), this);
     m_flightMode->subscribe();
@@ -813,7 +816,9 @@ void HybrisProvider::setStatus(HybrisProvider::Status status)
 */
 bool HybrisProvider::positioningEnabled()
 {
-    bool enabled = m_locationEnabled->value(false).toBool();
+    QSettings settings(LocationSettingsFile, QSettings::IniFormat);
+
+    bool enabled = settings.value(QStringLiteral("location/enabled"), false).toBool();
     bool flightMode = m_flightMode->value(false).toBool();
 
     return enabled && !flightMode;
