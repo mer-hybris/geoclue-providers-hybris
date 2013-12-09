@@ -8,7 +8,7 @@ target.path = /usr/libexec
 QT = core dbus network
 
 CONFIG += link_pkgconfig
-PKGCONFIG += libhardware android-headers contextkit-statefs connman-qt5 qofono-qt5
+PKGCONFIG += libhardware android-headers contextkit-statefs connman-qt5 qofono-qt5 mlite5
 
 DBUS_ADAPTORS = \
     org.freedesktop.Geoclue.xml \
@@ -37,6 +37,7 @@ SOURCES += \
 OTHER_FILES = \
     $${DBUS_ADAPTORS} \
     $${dbus_service.files} \
-    geoclue-hybris.provider
+    geoclue-hybris.provider \
+    rpm/geoclue-providers-hybris.spec
 
 INSTALLS += target dbus_service geoclue_provider

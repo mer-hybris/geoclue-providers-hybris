@@ -21,6 +21,7 @@
 #include <qofonoconnectioncontext.h>
 
 #include <contextproperty.h>
+#include <mlite5/MGConfItem>
 
 Q_DECLARE_METATYPE(QHostAddress)
 
@@ -95,11 +96,62 @@ void svStatusCallback(GpsSvStatus *svStatus)
                               Q_ARG(QList<int>, usedPrns));
 }
 
-void nmeaCallback(GpsUtcTime timestamp, const char *nmea, int length)
+bool nmeaChecksumValid(const QByteArray &nmea)
+{
+    unsigned char checksum = 0;
+    for (int i = 1; i < nmea.length(); ++i) {
+        if (nmea.at(i) == '*') {
+            if (nmea.length() < i+3)
+                return false;
+
+            checksum ^= nmea.mid(i+1, 2).toInt(0, 16);
+
+            break;
+        }
+
+        checksum ^= nmea.at(i);
+    }
+
+    return checksum == 0;
+}
+
+void parseRmc(const QByteArray &nmea)
+{
+    QList<QByteArray> fields = nmea.split(',');
+    if (fields.count() < 12)
+        return;
+
+    bool ok;
+    double variation = fields.at(10).toDouble(&ok);
+    if (ok) {
+        if (fields.at(11) == "W")
+            variation = -variation;
+
+        QMetaObject::invokeMethod(staticProvider, "setMagneticVariation", Q_ARG(double, variation));
+    }
+}
+
+void nmeaCallback(GpsUtcTime timestamp, const char *nmeaData, int length)
 {
     Q_UNUSED(timestamp)
-    Q_UNUSED(nmea)
-    Q_UNUSED(length)
+
+    // Trim trailing whitepsace
+    while (length > 0 && isspace(nmeaData[length-1]))
+        --length;
+
+    if (length == 0)
+        return;
+
+    QByteArray nmea = QByteArray::fromRawData(nmeaData, length);
+
+    if (!nmeaChecksumValid(nmea))
+        return;
+
+    // truncate checksum and * from end of sentence
+    nmea.truncate(nmea.length()-3);
+
+    if (nmea.startsWith("$GPRMC"))
+        parseRmc(nmea);
 }
 
 void setCapabilitiesCallback(uint32_t capabilities)
@@ -305,6 +357,9 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_flightMode = new ContextProperty(QStringLiteral("System.OfflineMode"), this);
     m_flightMode->subscribe();
     connect(m_flightMode, SIGNAL(valueChanged()), this, SLOT(locationEnabledChanged()));
+
+    m_magneticVariation =
+        new MGConfItem(QStringLiteral("/system/osso/location/settings/magneticvariation"), this);
 
     new GeoclueAdaptor(this);
     new PositionAdaptor(this);
@@ -677,6 +732,15 @@ void HybrisProvider::dataServiceConnectedChanged(bool connected)
 void HybrisProvider::networkServiceDestroyed()
 {
     m_networkService = 0;
+}
+
+void HybrisProvider::setMagneticVariation(double variation)
+{
+    double magneticVariation = m_magneticVariation->value(0.0).toDouble();
+    if (magneticVariation == variation)
+        return;
+
+    m_magneticVariation->set(variation);
 }
 
 void HybrisProvider::emitLocationChanged()
