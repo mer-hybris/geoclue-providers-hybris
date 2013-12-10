@@ -14,6 +14,7 @@ BuildRequires: pkgconfig(android-headers)
 BuildRequires: pkgconfig(contextkit-statefs)
 BuildRequires: pkgconfig(connman-qt5)
 BuildRequires: pkgconfig(qofono-qt5)
+BuildRequires: pkgconfig(mlite5)
 
 %description
 %{summary}.

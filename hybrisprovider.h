@@ -22,6 +22,7 @@ QT_FORWARD_DECLARE_CLASS(QHostAddress)
 class ContextProperty;
 class NetworkManager;
 class NetworkService;
+class MGConfItem;
 
 class HybrisProvider : public QObject, public QDBusContext
 {
@@ -112,6 +113,8 @@ private slots:
     void dataServiceConnectedChanged(bool connected);
     void networkServiceDestroyed();
 
+    void setMagneticVariation(double variation);
+
 private:
     void emitLocationChanged();
     void emitSatelliteChanged();
@@ -155,13 +158,14 @@ private:
 
     bool m_positionInjectionConnected;
 
-
     QNetworkAccessManager *m_manager;
     QNetworkReply *m_xtraDownloadReply;
 
     NetworkManager *m_networkManager;
     NetworkService *m_networkService;
     bool m_requestedConnect;
+
+    MGConfItem *m_magneticVariation;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)
