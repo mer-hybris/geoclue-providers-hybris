@@ -15,6 +15,7 @@ BuildRequires: pkgconfig(contextkit-statefs)
 BuildRequires: pkgconfig(connman-qt5)
 BuildRequires: pkgconfig(qofono-qt5)
 BuildRequires: pkgconfig(mlite5)
+Requires: connectionagent-qt5 >= 0.9.20
 
 %description
 %{summary}.
