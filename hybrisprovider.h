@@ -20,8 +20,7 @@ QT_FORWARD_DECLARE_CLASS(QDBusServiceWatcher)
 QT_FORWARD_DECLARE_CLASS(QNetworkAccessManager)
 QT_FORWARD_DECLARE_CLASS(QHostAddress)
 class ContextProperty;
-class NetworkManager;
-class NetworkService;
+class ComJollaConnectiondInterface;
 class MGConfItem;
 
 class HybrisProvider : public QObject, public QDBusContext
@@ -110,8 +109,10 @@ private slots:
     void xtraDownloadFinished();
     void agpsStatus(qint16 type, quint16 status, const QHostAddress &ipv4,
                     const QHostAddress &ipv6, const QByteArray &ssid, const QByteArray &password);
-    void dataServiceConnectedChanged(bool connected);
-    void networkServiceDestroyed();
+    void dataServiceConnected();
+    void connectionStateChanged(const QString &state, const QString &type);
+    void connectionConfigurationNeeded(const QString &type);
+    void connectionErrorReported(const QString &path, const QString &error);
 
     void setMagneticVariation(double variation);
 
@@ -161,8 +162,8 @@ private:
     QNetworkAccessManager *m_manager;
     QNetworkReply *m_xtraDownloadReply;
 
-    NetworkManager *m_networkManager;
-    NetworkService *m_networkService;
+    ComJollaConnectiondInterface *m_connectiond;
+    QString m_networkServicePath;
     bool m_requestedConnect;
 
     MGConfItem *m_magneticVariation;

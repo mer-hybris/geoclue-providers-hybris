@@ -10,6 +10,9 @@ QT = core dbus network
 CONFIG += link_pkgconfig
 PKGCONFIG += libhardware android-headers contextkit-statefs connman-qt5 qofono-qt5 mlite5
 
+DBUS_INTERFACES = \
+    com.jollamobile.Connectiond.xml
+
 DBUS_ADAPTORS = \
     org.freedesktop.Geoclue.xml \
     org.freedesktop.Geoclue.Position.xml \
@@ -35,6 +38,7 @@ SOURCES += \
     hybrisprovider.cpp
 
 OTHER_FILES = \
+    $${DBUS_INTERFACES} \
     $${DBUS_ADAPTORS} \
     $${dbus_service.files} \
     geoclue-hybris.provider \
