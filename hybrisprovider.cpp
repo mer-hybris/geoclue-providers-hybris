@@ -657,6 +657,9 @@ void HybrisProvider::xtraDownloadFailed(QNetworkReply::NetworkError error)
 
 void HybrisProvider::xtraDownloadFinished()
 {
+    if (!m_xtraDownloadReply)
+        return;
+
     QByteArray xtraData = m_xtraDownloadReply->readAll();
     m_xtra->inject_xtra_data(xtraData.data(), xtraData.length());
 }
