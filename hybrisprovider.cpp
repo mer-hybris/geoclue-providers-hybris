@@ -33,6 +33,7 @@ namespace
 HybrisProvider *staticProvider = 0;
 
 const int QuitIdleTime = 30000;
+const int FixTimeout = 30000;
 const quint32 MinimumInterval = 1000;
 const quint32 PreferredAccuracy = 0;
 const quint32 PreferredInitialFixTime = 0;
@@ -381,7 +382,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_connectiond = new ComJollaConnectiondInterface(QStringLiteral("com.jolla.Connectiond"),
                                                      QStringLiteral("/Connectiond"), connection);
 
-    m_idleTimer = startTimer(QuitIdleTime);
+    m_idleTimer.start(QuitIdleTime, this);
 
     const hw_module_t *hwModule;
 
@@ -561,10 +562,12 @@ int HybrisProvider::GetSatellite(int &satelliteUsed, int &satelliteVisible, QLis
 
 void HybrisProvider::timerEvent(QTimerEvent *event)
 {
-    if (event->timerId() == m_idleTimer) {
-        killTimer(m_idleTimer);
-        m_idleTimer = -1;
+    if (event->timerId() == m_idleTimer.timerId()) {
+        m_idleTimer.stop();
         qApp->quit();
+    } else if (event->timerId() == m_fixLostTimer.timerId()) {
+        m_fixLostTimer.stop();
+        setStatus(StatusAcquiring);
     } else {
         QObject::timerEvent(event);
     }
@@ -581,6 +584,8 @@ void HybrisProvider::setLocation(const Location &location)
                         this, SLOT(injectPosition(int,int,double,double,double,Accuracy)));
         m_positionInjectionConnected = false;
     }
+
+    m_fixLostTimer.start(FixTimeout, this);
 
     setStatus(StatusAvailable);
     m_currentLocation = location;
@@ -826,10 +831,7 @@ void HybrisProvider::startPositioningIfNeeded()
     if (!positioningEnabled())
         return;
 
-    if (m_idleTimer != -1) {
-        killTimer(m_idleTimer);
-        m_idleTimer = -1;
-    }
+    m_idleTimer.stop();
 
     if (!m_gps)
         return;
@@ -894,8 +896,10 @@ void HybrisProvider::stopPositioningIfNeeded()
         setStatus(StatusUnavailable);
     }
 
+    m_fixLostTimer.stop();
+
     if (m_watchedServices.isEmpty())
-        m_idleTimer = startTimer(QuitIdleTime);
+        m_idleTimer.start(QuitIdleTime, this);
 }
 
 void HybrisProvider::setStatus(HybrisProvider::Status status)

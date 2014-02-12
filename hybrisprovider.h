@@ -8,6 +8,7 @@
 
 #include <QtCore/QObject>
 #include <QtCore/QStringList>
+#include <QtCore/QBasicTimer>
 #include <QtDBus/QDBusContext>
 #include <QtNetwork/QNetworkReply>
 
@@ -151,7 +152,9 @@ private:
     QDBusServiceWatcher *m_watcher;
     QStringList m_watchedServices;
 
-    int m_idleTimer;
+    QBasicTimer m_idleTimer;
+    QBasicTimer m_fixLostTimer;
+
     Status m_status;
 
     QFileSystemWatcher *m_locationSettings;
