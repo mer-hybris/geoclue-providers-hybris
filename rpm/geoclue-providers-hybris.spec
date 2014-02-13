@@ -11,7 +11,6 @@ BuildRequires: pkgconfig(Qt5DBus)
 BuildRequires: pkgconfig(Qt5Network)
 BuildRequires: pkgconfig(libhardware)
 BuildRequires: pkgconfig(android-headers)
-BuildRequires: pkgconfig(contextkit-statefs)
 BuildRequires: pkgconfig(connman-qt5)
 BuildRequires: pkgconfig(qofono-qt5)
 BuildRequires: pkgconfig(mlite5)
@@ -26,7 +25,7 @@ Requires: connectionagent-qt5 >= 0.9.20
 
 
 %build
-qmake -qt=5
+qmake -qt=5 geoclue-providers-hybris.pro
 make %{?_smp_mflags}
 
 
@@ -41,6 +40,7 @@ make INSTALL_ROOT=%{buildroot} install
 %defattr(04755,root,root,-)
 %{_libexecdir}/geoclue-hybris
 %defattr(-,root,root,-)
-%{_datadir}/dbus-1/services/org.freedesktop.Geoclue.Providers.Hybris.service
+%{_sysconfdir}/dbus-1
+%{_datadir}/dbus-1
 %{_datadir}/geoclue-providers/geoclue-hybris.provider
 

@@ -20,9 +20,9 @@ QT_FORWARD_DECLARE_CLASS(QFileSystemWatcher)
 QT_FORWARD_DECLARE_CLASS(QDBusServiceWatcher)
 QT_FORWARD_DECLARE_CLASS(QNetworkAccessManager)
 QT_FORWARD_DECLARE_CLASS(QHostAddress)
-class ContextProperty;
 class ComJollaConnectiondInterface;
 class MGConfItem;
+class DeviceControl;
 
 class HybrisProvider : public QObject, public QDBusContext
 {
@@ -31,6 +31,8 @@ class HybrisProvider : public QObject, public QDBusContext
 public:
     explicit HybrisProvider(QObject *parent = 0);
     ~HybrisProvider();
+
+    void setDeviceController(DeviceControl *control);
 
     // org.freedesktop.Geoclue
     void AddReference();
@@ -171,7 +173,6 @@ private:
     Status m_status;
 
     QFileSystemWatcher *m_locationSettings;
-    ContextProperty *m_flightMode;
 
     bool m_positionInjectionConnected;
 
@@ -185,6 +186,8 @@ private:
     MGConfItem *m_magneticVariation;
 
     bool m_gpsStarted;
+
+    DeviceControl *m_deviceControl;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)
