@@ -117,6 +117,9 @@ private slots:
 
     void setMagneticVariation(double variation);
 
+    void engineOn();
+    void engineOff();
+
 private:
     void emitLocationChanged();
     void emitSatelliteChanged();
@@ -124,6 +127,7 @@ private:
     void stopPositioningIfNeeded();
     void setStatus(Status status);
     bool positioningEnabled();
+    quint32 minimumRequestedUpdateInterval() const;
 
     void startDataConnection();
     void stopDataConnection();
@@ -150,7 +154,16 @@ private:
     QList<int> m_previousUsedPrns;
 
     QDBusServiceWatcher *m_watcher;
-    QStringList m_watchedServices;
+    struct ServiceData {
+        ServiceData()
+        :   referenceCount(0), updateInterval(0)
+        {
+        }
+
+        int referenceCount;
+        quint32 updateInterval;
+    };
+    QMap<QString, ServiceData> m_watchedServices;
 
     QBasicTimer m_idleTimer;
     QBasicTimer m_fixLostTimer;
@@ -170,6 +183,8 @@ private:
     bool m_requestedConnect;
 
     MGConfItem *m_magneticVariation;
+
+    bool m_gpsStarted;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)

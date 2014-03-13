@@ -73,7 +73,16 @@ void locationCallback(GpsLocation *location)
 
 void statusCallback(GpsStatus *status)
 {
-    Q_UNUSED(status)
+    switch (status->status) {
+    case GPS_STATUS_ENGINE_ON:
+        QMetaObject::invokeMethod(staticProvider, "engineOn");
+        break;
+    case GPS_STATUS_ENGINE_OFF:
+        QMetaObject::invokeMethod(staticProvider, "engineOff");
+        break;
+    default:
+        ;
+    }
 }
 
 void svStatusCallback(GpsSvStatus *svStatus)
@@ -339,7 +348,7 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, QList<SatelliteIn
 HybrisProvider::HybrisProvider(QObject *parent)
 :   QObject(parent), m_gps(0), m_agps(0), m_agpsril(0), m_gpsni(0), m_xtra(0),
     m_status(StatusUnavailable), m_positionInjectionConnected(false), m_xtraDownloadReply(0),
-    m_requestedConnect(false)
+    m_requestedConnect(false), m_gpsStarted(false)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -463,10 +472,8 @@ void HybrisProvider::AddReference()
         qFatal("AddReference must only be called from DBus");
 
     const QString service = message().service();
-    if (!m_watchedServices.contains(service))
-        m_watcher->addWatchedService(service);
-
-    m_watchedServices.append(service);
+    m_watcher->addWatchedService(service);
+    m_watchedServices[service].referenceCount += 1;
 
     startPositioningIfNeeded();
 }
@@ -477,9 +484,14 @@ void HybrisProvider::RemoveReference()
         qFatal("RemoveReference must only be called from DBus");
 
     const QString service = message().service();
-    m_watchedServices.removeOne(service);
-    if (!m_watchedServices.contains(service))
+
+    if (m_watchedServices[service].referenceCount > 0)
+        m_watchedServices[service].referenceCount -= 1;
+
+    if (m_watchedServices[service].referenceCount == 0) {
         m_watcher->removeWatchedService(service);
+        m_watchedServices.remove(service);
+    }
 
     stopPositioningIfNeeded();
 }
@@ -497,7 +509,28 @@ int HybrisProvider::GetStatus()
 
 void HybrisProvider::SetOptions(const QVariantMap &options)
 {
-    Q_UNUSED(options)
+    if (!calledFromDBus())
+        qFatal("SetOptions must only be called from DBus");
+
+    const QString service = message().service();
+    if (!m_watchedServices.contains(service)) {
+        qWarning("Only active users can call SetOptions");
+        return;
+    }
+
+    if (options.contains(QStringLiteral("UpdateInterval"))) {
+        m_watchedServices[service].updateInterval =
+            options.value(QStringLiteral("UpdateInterval")).toUInt();
+
+        quint32 updateInterval = minimumRequestedUpdateInterval();
+
+        int error = m_gps->set_position_mode(GPS_POSITION_MODE_MS_BASED,
+                                             GPS_POSITION_RECURRENCE_PERIODIC, updateInterval,
+                                             PreferredAccuracy, PreferredInitialFixTime);
+        if (error) {
+            qWarning("While updating the updateInterval, failed to set position mode, error %d\n", error);
+        }
+    }
 }
 
 int HybrisProvider::GetPosition(int &timestamp, double &latitude, double &longitude,
@@ -606,7 +639,7 @@ void HybrisProvider::setSatellite(const QList<SatelliteInfo> &satellites, const 
 
 void HybrisProvider::serviceUnregistered(const QString &service)
 {
-    m_watchedServices.removeAll(service);
+    m_watchedServices.remove(service);
     m_watcher->removeWatchedService(service);
     stopPositioningIfNeeded();
 }
@@ -782,6 +815,28 @@ void HybrisProvider::setMagneticVariation(double variation)
     m_magneticVariation->set(variation);
 }
 
+void HybrisProvider::engineOn()
+{
+    // The GPS is being turned back on because a position update is required soon.
+
+    // I would like to set the status to StatusAcquiring here, but that would cause Geoclue Master
+    // to switch to using another provider. Instead start the fix lost timer.
+    if (m_status != StatusAvailable)
+        setStatus(StatusAcquiring);
+
+    m_fixLostTimer.start(FixTimeout, this);
+}
+
+void HybrisProvider::engineOff()
+{
+    // The GPS is being turned off because a position update is not required for a while.
+
+    // I would like to set the status to StatusUnavailable here, but that would cause Geoclue
+    // Master to switch to using another provider.
+
+    m_fixLostTimer.stop();
+}
+
 void HybrisProvider::emitLocationChanged()
 {
     PositionFields positionFields = NoPositionFields;
@@ -820,7 +875,7 @@ void HybrisProvider::emitSatelliteChanged()
 void HybrisProvider::startPositioningIfNeeded()
 {
     // Positioning is already started.
-    if (m_status == StatusAcquiring || m_status == StatusAvailable)
+    if (m_gpsStarted)
         return;
 
     // Positioning is unused.
@@ -847,7 +902,8 @@ void HybrisProvider::startPositioningIfNeeded()
     }
 
     int error = m_gps->set_position_mode(GPS_POSITION_MODE_MS_BASED,
-                                         GPS_POSITION_RECURRENCE_PERIODIC, MinimumInterval,
+                                         GPS_POSITION_RECURRENCE_PERIODIC,
+                                         minimumRequestedUpdateInterval(),
                                          PreferredAccuracy, PreferredInitialFixTime);
     if (error) {
         qWarning("Failed to set position mode, error %d\n", error);
@@ -865,13 +921,13 @@ void HybrisProvider::startPositioningIfNeeded()
         return;
     }
 
-    setStatus(StatusAcquiring);
+    m_gpsStarted = true;
 }
 
 void HybrisProvider::stopPositioningIfNeeded()
 {
     // Positioning is already stopped.
-    if (m_status == StatusError || m_status == StatusUnavailable)
+    if (!m_gpsStarted)
         return;
 
     // Positioning enabled externally and positioning is still being used.
@@ -892,7 +948,7 @@ void HybrisProvider::stopPositioningIfNeeded()
         int error = m_gps->stop();
         if (error)
             qWarning("Failed to stop positioning, error %d\n", error);
-
+        m_gpsStarted = false;
         setStatus(StatusUnavailable);
     }
 
@@ -924,6 +980,30 @@ bool HybrisProvider::positioningEnabled()
     bool flightMode = m_flightMode->value(false).toBool();
 
     return enabled && !flightMode;
+}
+
+quint32 HybrisProvider::minimumRequestedUpdateInterval() const
+{
+    quint32 updateInterval = UINT_MAX;
+
+    foreach (const ServiceData &data, m_watchedServices) {
+        // Old data, service not currently using positioning.
+        if (data.referenceCount <= 0) {
+            qWarning("Service data was not removed!");
+            continue;
+        }
+
+        // Service hasn't requested a specific update interval.
+        if (data.updateInterval == 0)
+            continue;
+
+        updateInterval = qMin(updateInterval, data.updateInterval);
+    }
+
+    if (updateInterval == UINT_MAX)
+        return MinimumInterval;
+
+    return qMax(updateInterval, MinimumInterval);
 }
 
 void HybrisProvider::startDataConnection()
