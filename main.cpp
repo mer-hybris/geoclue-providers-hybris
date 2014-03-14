@@ -7,6 +7,7 @@
 #include <QtDBus/QDBusConnection>
 
 #include "hybrisprovider.h"
+#include "devicecontrol.h"
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -41,11 +42,24 @@ int main(int argc, char *argv[])
     if (numberGroups == -1)
         qFatal("Failed to set supplementary groups, %s", strerror(errno));
 
+    // Register service on DBus system bus prior to dropping privileges.
+    QDBusConnection system = QDBusConnection::systemBus();
+    if (!system.registerService(QStringLiteral("com.jollamobile.gps")))
+        qFatal("Failed to register service com.jollamobile.gps");
+
+    // Drop privileges.
     result = setuid(realUid);
     if (result == -1)
         qFatal("Failed to set process uid to %d, %s", realUid, strerror(errno));
 
     QCoreApplication a(argc, argv);
+
+
+    DeviceControl control;
+
+    if (!system.registerObject(QStringLiteral("/com/jollamobile/gps/Device"), &control))
+        qFatal("Failed to register object /com/jollamobile/gps/Device");
+
 
     QDBusConnection connection = QDBusConnection::sessionBus();
 
@@ -56,6 +70,8 @@ int main(int argc, char *argv[])
 
     if (!connection.registerObject(QStringLiteral("/org/freedesktop/Geoclue/Providers/Hybris"), &provider))
         qFatal("Failed to register object /org/freedesktop/Geoclue/Providers/Hybris");
+
+    provider.setDeviceController(&control);
 
     return a.exec();
 }

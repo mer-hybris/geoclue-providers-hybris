@@ -4,6 +4,8 @@
 */
 
 #include "hybrisprovider.h"
+#include "devicecontrol.h"
+
 #include "geoclue_adaptor.h"
 #include "position_adaptor.h"
 #include "velocity_adaptor.h"
@@ -22,7 +24,6 @@
 #include <qofonoconnectionmanager.h>
 #include <qofonoconnectioncontext.h>
 
-#include <contextproperty.h>
 #include <mlite5/MGConfItem>
 
 Q_DECLARE_METATYPE(QHostAddress)
@@ -348,7 +349,7 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, QList<SatelliteIn
 HybrisProvider::HybrisProvider(QObject *parent)
 :   QObject(parent), m_gps(0), m_agps(0), m_agpsril(0), m_gpsni(0), m_xtra(0),
     m_status(StatusUnavailable), m_positionInjectionConnected(false), m_xtraDownloadReply(0),
-    m_requestedConnect(false), m_gpsStarted(false)
+    m_requestedConnect(false), m_gpsStarted(false), m_deviceControl(0)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -365,10 +366,6 @@ HybrisProvider::HybrisProvider(QObject *parent)
     connect(m_locationSettings, SIGNAL(fileChanged(QString)),
             this, SLOT(locationEnabledChanged()));
     m_locationSettings->addPath(LocationSettingsFile);
-
-    m_flightMode = new ContextProperty(QStringLiteral("System.OfflineMode"), this);
-    m_flightMode->subscribe();
-    connect(m_flightMode, SIGNAL(valueChanged()), this, SLOT(locationEnabledChanged()));
 
     m_magneticVariation =
         new MGConfItem(QStringLiteral("/system/osso/location/settings/magneticvariation"), this);
@@ -464,6 +461,22 @@ HybrisProvider::~HybrisProvider()
 
     if (staticProvider == this)
         staticProvider = 0;
+}
+
+void HybrisProvider::setDeviceController(DeviceControl *control)
+{
+    if (m_deviceControl == control)
+        return;
+
+    if (m_deviceControl) {
+        disconnect(m_deviceControl, SIGNAL(poweredChanged()),
+                   this, SLOT(locationEnabledChanged()));
+    }
+
+    m_deviceControl = control;
+
+    if (m_deviceControl)
+        connect(m_deviceControl, SIGNAL(poweredChanged()), this, SLOT(locationEnabledChanged()));
 }
 
 void HybrisProvider::AddReference()
@@ -977,9 +990,10 @@ bool HybrisProvider::positioningEnabled()
     QSettings settings(LocationSettingsFile, QSettings::IniFormat);
 
     bool enabled = settings.value(QStringLiteral("location/enabled"), false).toBool();
-    bool flightMode = m_flightMode->value(false).toBool();
 
-    return enabled && !flightMode;
+    bool powered = m_deviceControl->powered();
+
+    return enabled && powered;
 }
 
 quint32 HybrisProvider::minimumRequestedUpdateInterval() const
