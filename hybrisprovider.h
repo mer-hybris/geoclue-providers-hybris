@@ -21,8 +21,10 @@ QT_FORWARD_DECLARE_CLASS(QDBusServiceWatcher)
 QT_FORWARD_DECLARE_CLASS(QNetworkAccessManager)
 QT_FORWARD_DECLARE_CLASS(QHostAddress)
 class ComJollaConnectiondInterface;
+class ComJollaLipstickConnectionSelectorIfInterface;
 class MGConfItem;
 class DeviceControl;
+class NetworkManager;
 
 class HybrisProvider : public QObject, public QDBusContext
 {
@@ -114,8 +116,8 @@ private slots:
                     const QHostAddress &ipv6, const QByteArray &ssid, const QByteArray &password);
     void dataServiceConnected();
     void connectionStateChanged(const QString &state, const QString &type);
-    void connectionConfigurationNeeded(const QString &type);
     void connectionErrorReported(const QString &path, const QString &error);
+    void connectionSelected(bool selected);
 
     void setMagneticVariation(double variation);
 
@@ -180,6 +182,8 @@ private:
     QNetworkReply *m_xtraDownloadReply;
 
     ComJollaConnectiondInterface *m_connectiond;
+    ComJollaLipstickConnectionSelectorIfInterface *m_connectionSelector;
+
     QString m_networkServicePath;
     bool m_requestedConnect;
 
@@ -188,6 +192,8 @@ private:
     bool m_gpsStarted;
 
     DeviceControl *m_deviceControl;
+
+    NetworkManager *m_networkManager;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)

@@ -12,6 +12,7 @@
 #include "satellite_adaptor.h"
 
 #include "connectiond_interface.h"
+#include "connectionselector_interface.h"
 
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkReply>
@@ -349,7 +350,8 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, QList<SatelliteIn
 HybrisProvider::HybrisProvider(QObject *parent)
 :   QObject(parent), m_gps(0), m_agps(0), m_agpsril(0), m_gpsni(0), m_xtra(0),
     m_status(StatusUnavailable), m_positionInjectionConnected(false), m_xtraDownloadReply(0),
-    m_requestedConnect(false), m_gpsStarted(false), m_deviceControl(0)
+    m_requestedConnect(false), m_gpsStarted(false), m_deviceControl(0),
+    m_networkManager(new NetworkManager(this))
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -387,6 +389,9 @@ HybrisProvider::HybrisProvider(QObject *parent)
 
     m_connectiond = new ComJollaConnectiondInterface(QStringLiteral("com.jolla.Connectiond"),
                                                      QStringLiteral("/Connectiond"), connection);
+
+    m_connectionSelector = new ComJollaLipstickConnectionSelectorIfInterface(
+        QStringLiteral("com.jolla.lipstick.ConnectionSelector"), QStringLiteral("/"), connection);
 
     m_idleTimer.start(QuitIdleTime, this);
 
@@ -751,9 +756,8 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
 
 void HybrisProvider::dataServiceConnected()
 {
-    NetworkManager manager;
     NetworkService *service = 0;
-    foreach (NetworkService *s, manager.getServices(QStringLiteral("cellular"))) {
+    foreach (NetworkService *s, m_networkManager->getServices(QStringLiteral("cellular"))) {
         if (s->connected()) {
             service = s;
             break;
@@ -805,17 +809,17 @@ void HybrisProvider::connectionStateChanged(const QString &state, const QString 
         dataServiceConnected();
 }
 
-void HybrisProvider::connectionConfigurationNeeded(const QString &type)
-{
-    if (type == QLatin1String("cellular"))
-        m_agps->data_conn_failed(AGPS_TYPE_SUPL);
-}
-
 void HybrisProvider::connectionErrorReported(const QString &path, const QString &error)
 {
     Q_UNUSED(error)
 
     if (path.contains(QStringLiteral("cellular")))
+        m_agps->data_conn_failed(AGPS_TYPE_SUPL);
+}
+
+void HybrisProvider::connectionSelected(bool selected)
+{
+    if (!selected)
         m_agps->data_conn_failed(AGPS_TYPE_SUPL);
 }
 
@@ -1023,8 +1027,7 @@ quint32 HybrisProvider::minimumRequestedUpdateInterval() const
 void HybrisProvider::startDataConnection()
 {
     // Check if existing cellular network service is connected
-    NetworkManager manager;
-    NetworkTechnology *technology = manager.getTechnology(QStringLiteral("cellular"));
+    NetworkTechnology *technology = m_networkManager->getTechnology(QStringLiteral("cellular"));
     if (technology && technology->connected()) {
         dataServiceConnected();
         return;
@@ -1033,10 +1036,10 @@ void HybrisProvider::startDataConnection()
     // No data connection, ask connection agent to connect to a cellular service
     connect(m_connectiond, SIGNAL(connectionState(QString,QString)),
             this, SLOT(connectionStateChanged(QString,QString)));
-    connect(m_connectiond, SIGNAL(configurationNeeded(QString)),
-            this, SLOT(connectionConfigurationNeeded(QString)));
     connect(m_connectiond, SIGNAL(errorReported(QString,QString)),
             this, SLOT(connectionErrorReported(QString,QString)));
+    connect(m_connectionSelector, SIGNAL(connectionSelectorClosed(bool)),
+            this, SLOT(connectionSelected(bool)));
     m_connectiond->connectToType(QStringLiteral("cellular"));
 
     m_requestedConnect = true;
@@ -1044,20 +1047,21 @@ void HybrisProvider::startDataConnection()
 
 void HybrisProvider::stopDataConnection()
 {
-    if (m_requestedConnect) {
-        disconnect(m_connectiond, SIGNAL(connectionState(QString,QString)),
-                   this, SLOT(connectionStateChanged(QString,QString)));
-        disconnect(m_connectiond, SIGNAL(configurationNeeded(QString)),
-                this, SLOT(connectionConfigurationNeeded(QString)));
-        disconnect(m_connectiond, SIGNAL(errorReported(QString,QString)),
-                this, SLOT(connectionErrorReported(QString,QString)));
-        m_requestedConnect = false;
+    if (!m_requestedConnect)
+        return;
 
-        if (!m_networkServicePath.isEmpty()) {
-            NetworkService service;
-            service.setPath(m_networkServicePath);
-            service.requestDisconnect();
-            m_networkServicePath.clear();
-        }
+    disconnect(m_connectiond, SIGNAL(connectionState(QString,QString)),
+               this, SLOT(connectionStateChanged(QString,QString)));
+    disconnect(m_connectiond, SIGNAL(errorReported(QString,QString)),
+               this, SLOT(connectionErrorReported(QString,QString)));
+    disconnect(m_connectionSelector, SIGNAL(connectionSelectorClosed(bool)),
+               this, SLOT(connectionSelected(bool)));
+    m_requestedConnect = false;
+
+    if (!m_networkServicePath.isEmpty()) {
+        NetworkService service;
+        service.setPath(m_networkServicePath);
+        service.requestDisconnect();
+        m_networkServicePath.clear();
     }
 }
