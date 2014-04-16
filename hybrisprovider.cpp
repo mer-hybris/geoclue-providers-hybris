@@ -706,8 +706,33 @@ void HybrisProvider::xtraDownloadRequest()
     if (m_xtraDownloadReply)
         return;
 
-    QNetworkRequest request(QUrl(QStringLiteral("http://xtra1.gpsonextra.net/xtra.bin")));
-    m_xtraDownloadReply = m_manager->get(request);
+    QFile gpsConf(QStringLiteral("/etc/gps.conf"));
+    if (!gpsConf.open(QIODevice::ReadOnly))
+        return;
+
+    while (!gpsConf.atEnd()) {
+        const QByteArray line = gpsConf.readLine().trimmed();
+        if (line.startsWith('#'))
+            continue;
+
+        const QList<QByteArray> split = line.split('=');
+        if (split.length() != 2)
+            continue;
+
+        const QByteArray key = split.at(0).trimmed();
+        if (key == "XTRA_SERVER_1" || key == "XTRA_SERVER_2" || key == "XTRA_SERVER_3")
+            m_xtraServers.enqueue(QUrl::fromEncoded(split.at(1).trimmed()));
+    }
+
+    xtraDownloadRequestSendNext();
+}
+
+void HybrisProvider::xtraDownloadRequestSendNext()
+{
+    if (m_xtraServers.isEmpty())
+        return;
+
+    m_xtraDownloadReply = m_manager->get(QNetworkRequest(m_xtraServers.dequeue()));
     connect(m_xtraDownloadReply, SIGNAL(finished()), this, SLOT(xtraDownloadFinished()));
     connect(m_xtraDownloadReply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(xtraDownloadFailed(QNetworkReply::NetworkError)));
@@ -719,6 +744,9 @@ void HybrisProvider::xtraDownloadFailed(QNetworkReply::NetworkError error)
 
     m_xtraDownloadReply->deleteLater();
     m_xtraDownloadReply = 0;
+
+    // Try next server
+    xtraDownloadRequestSendNext();
 }
 
 void HybrisProvider::xtraDownloadFinished()
@@ -728,6 +756,11 @@ void HybrisProvider::xtraDownloadFinished()
 
     QByteArray xtraData = m_xtraDownloadReply->readAll();
     m_xtra->inject_xtra_data(xtraData.data(), xtraData.length());
+
+    m_xtraDownloadReply->deleteLater();
+    m_xtraDownloadReply = 0;
+
+    m_xtraServers.clear();
 }
 
 void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress &ipv4,

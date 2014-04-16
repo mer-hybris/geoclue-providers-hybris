@@ -9,6 +9,7 @@
 #include <QtCore/QObject>
 #include <QtCore/QStringList>
 #include <QtCore/QBasicTimer>
+#include <QtCore/QQueue>
 #include <QtDBus/QDBusContext>
 #include <QtNetwork/QNetworkReply>
 
@@ -113,6 +114,7 @@ private slots:
                         double altitude, const Accuracy &accuracy);
     void injectUtcTime();
     void xtraDownloadRequest();
+    void xtraDownloadRequestSendNext();
     void xtraDownloadFailed(QNetworkReply::NetworkError error);
     void xtraDownloadFinished();
     void agpsStatus(qint16 type, quint16 status, const QHostAddress &ipv4,
@@ -186,6 +188,7 @@ private:
 
     QNetworkAccessManager *m_manager;
     QNetworkReply *m_xtraDownloadReply;
+    QQueue<QUrl> m_xtraServers;
 
     ComJollaConnectiondInterface *m_connectiond;
     ComJollaLipstickConnectionSelectorIfInterface *m_connectionSelector;
