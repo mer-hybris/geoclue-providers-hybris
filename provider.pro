@@ -13,7 +13,8 @@ PKGCONFIG += libhardware android-headers connman-qt5 qofono-qt5 mlite5
 LIBS += -L. -lhybris_dbus -lcontrol_dbus
 
 DBUS_INTERFACES = \
-    com.jollamobile.Connectiond.xml
+    com.jollamobile.Connectiond.xml \
+    com.jolla.lipstick.ConnectionSelector.xml
 
 session_dbus_service.files = org.freedesktop.Geoclue.Providers.Hybris.service
 session_dbus_service.path = /usr/share/dbus-1/services

@@ -9,6 +9,7 @@
 #include <QtCore/QObject>
 #include <QtCore/QStringList>
 #include <QtCore/QBasicTimer>
+#include <QtCore/QQueue>
 #include <QtDBus/QDBusContext>
 #include <QtNetwork/QNetworkReply>
 
@@ -21,8 +22,13 @@ QT_FORWARD_DECLARE_CLASS(QDBusServiceWatcher)
 QT_FORWARD_DECLARE_CLASS(QNetworkAccessManager)
 QT_FORWARD_DECLARE_CLASS(QHostAddress)
 class ComJollaConnectiondInterface;
+class ComJollaLipstickConnectionSelectorIfInterface;
 class MGConfItem;
 class DeviceControl;
+class NetworkManager;
+class NetworkTechnology;
+class QOfonoManager;
+class QOfonoConnectionManager;
 
 class HybrisProvider : public QObject, public QDBusContext
 {
@@ -108,19 +114,23 @@ private slots:
                         double altitude, const Accuracy &accuracy);
     void injectUtcTime();
     void xtraDownloadRequest();
+    void xtraDownloadRequestSendNext();
     void xtraDownloadFailed(QNetworkReply::NetworkError error);
     void xtraDownloadFinished();
     void agpsStatus(qint16 type, quint16 status, const QHostAddress &ipv4,
                     const QHostAddress &ipv6, const QByteArray &ssid, const QByteArray &password);
     void dataServiceConnected();
-    void connectionStateChanged(const QString &state, const QString &type);
-    void connectionConfigurationNeeded(const QString &type);
     void connectionErrorReported(const QString &path, const QString &error);
+    void connectionSelected(bool selected);
 
     void setMagneticVariation(double variation);
 
     void engineOn();
     void engineOff();
+
+    void technologiesChanged();
+    void ofonoModemsChanged();
+    void cellularConnected(bool connected);
 
 private:
     void emitLocationChanged();
@@ -178,8 +188,11 @@ private:
 
     QNetworkAccessManager *m_manager;
     QNetworkReply *m_xtraDownloadReply;
+    QQueue<QUrl> m_xtraServers;
 
     ComJollaConnectiondInterface *m_connectiond;
+    ComJollaLipstickConnectionSelectorIfInterface *m_connectionSelector;
+
     QString m_networkServicePath;
     bool m_requestedConnect;
 
@@ -188,6 +201,12 @@ private:
     bool m_gpsStarted;
 
     DeviceControl *m_deviceControl;
+
+    NetworkManager *m_networkManager;
+    NetworkTechnology *m_cellularTechnology;
+
+    QOfonoManager *m_ofonoManager;
+    QOfonoConnectionManager *m_connectionManager;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)
