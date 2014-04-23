@@ -351,7 +351,9 @@ HybrisProvider::HybrisProvider(QObject *parent)
 :   QObject(parent), m_gps(0), m_agps(0), m_agpsril(0), m_gpsni(0), m_xtra(0),
     m_status(StatusUnavailable), m_positionInjectionConnected(false), m_xtraDownloadReply(0),
     m_requestedConnect(false), m_gpsStarted(false), m_deviceControl(0),
-    m_networkManager(new NetworkManager(this))
+    m_networkManager(new NetworkManager(this)), m_cellularTechnology(0),
+    m_ofonoManager(new QOfonoManager(this)),
+    m_connectionManager(new QOfonoConnectionManager(this))
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -378,6 +380,14 @@ HybrisProvider::HybrisProvider(QObject *parent)
     new SatelliteAdaptor(this);
 
     m_manager = new QNetworkAccessManager(this);
+
+    connect(m_networkManager, SIGNAL(technologiesChanged()), this, SLOT(technologiesChanged()));
+
+    technologiesChanged();
+
+    connect(m_ofonoManager, SIGNAL(modemsChanged(QStringList)), this, SLOT(ofonoModemsChanged()));
+
+    ofonoModemsChanged();
 
     QDBusConnection connection = QDBusConnection::sessionBus();
 
@@ -775,21 +785,7 @@ void HybrisProvider::dataServiceConnected()
         return;
     }
 
-    QOfonoManager ofonoManager;
-    if (!ofonoManager.available()) {
-        qWarning("Ofono not available.");
-        return;
-    }
-
-    QStringList modems = ofonoManager.modems();
-    if (modems.isEmpty()) {
-        qWarning("No modems found.");
-        return;
-    }
-
-    QOfonoConnectionManager ofonoConnectionManager;
-    ofonoConnectionManager.setModemPath(modems.first());
-    QStringList contexts = ofonoConnectionManager.contexts();
+    QStringList contexts = m_connectionManager->contexts();
     QOfonoConnectionContext connectionContext;
     foreach (const QString &context, contexts) {
         // Find the APN of the connection context associated with the network session.
@@ -801,12 +797,6 @@ void HybrisProvider::dataServiceConnected()
             break;
         }
     }
-}
-
-void HybrisProvider::connectionStateChanged(const QString &state, const QString &type)
-{
-    if (type == QLatin1String("cellular") && state == QLatin1String("online"))
-        dataServiceConnected();
 }
 
 void HybrisProvider::connectionErrorReported(const QString &path, const QString &error)
@@ -852,6 +842,37 @@ void HybrisProvider::engineOff()
     // Master to switch to using another provider.
 
     m_fixLostTimer.stop();
+}
+
+void HybrisProvider::technologiesChanged()
+{
+    if (m_cellularTechnology) {
+        disconnect(m_cellularTechnology, SIGNAL(connectedChanged(bool)),
+                   this, SLOT(cellularConnected(bool)));
+    }
+
+    m_cellularTechnology = m_networkManager->getTechnology(QStringLiteral("cellular"));
+
+    if (m_cellularTechnology) {
+        connect(m_cellularTechnology, SIGNAL(connectedChanged(bool)),
+                this, SLOT(cellularConnected(bool)));
+    }
+}
+
+void HybrisProvider::ofonoModemsChanged()
+{
+    const QStringList modems = m_ofonoManager->modems();
+    QString modem;
+    if (!modems.isEmpty())
+        modem = modems.first();
+
+    m_connectionManager->setModemPath(modem);
+}
+
+void HybrisProvider::cellularConnected(bool connected)
+{
+    if (connected)
+        dataServiceConnected();
 }
 
 void HybrisProvider::emitLocationChanged()
@@ -1034,8 +1055,6 @@ void HybrisProvider::startDataConnection()
     }
 
     // No data connection, ask connection agent to connect to a cellular service
-    connect(m_connectiond, SIGNAL(connectionState(QString,QString)),
-            this, SLOT(connectionStateChanged(QString,QString)));
     connect(m_connectiond, SIGNAL(errorReported(QString,QString)),
             this, SLOT(connectionErrorReported(QString,QString)));
     connect(m_connectionSelector, SIGNAL(connectionSelectorClosed(bool)),
@@ -1050,8 +1069,6 @@ void HybrisProvider::stopDataConnection()
     if (!m_requestedConnect)
         return;
 
-    disconnect(m_connectiond, SIGNAL(connectionState(QString,QString)),
-               this, SLOT(connectionStateChanged(QString,QString)));
     disconnect(m_connectiond, SIGNAL(errorReported(QString,QString)),
                this, SLOT(connectionErrorReported(QString,QString)));
     disconnect(m_connectionSelector, SIGNAL(connectionSelectorClosed(bool)),

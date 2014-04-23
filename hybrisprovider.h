@@ -25,6 +25,9 @@ class ComJollaLipstickConnectionSelectorIfInterface;
 class MGConfItem;
 class DeviceControl;
 class NetworkManager;
+class NetworkTechnology;
+class QOfonoManager;
+class QOfonoConnectionManager;
 
 class HybrisProvider : public QObject, public QDBusContext
 {
@@ -115,7 +118,6 @@ private slots:
     void agpsStatus(qint16 type, quint16 status, const QHostAddress &ipv4,
                     const QHostAddress &ipv6, const QByteArray &ssid, const QByteArray &password);
     void dataServiceConnected();
-    void connectionStateChanged(const QString &state, const QString &type);
     void connectionErrorReported(const QString &path, const QString &error);
     void connectionSelected(bool selected);
 
@@ -123,6 +125,10 @@ private slots:
 
     void engineOn();
     void engineOff();
+
+    void technologiesChanged();
+    void ofonoModemsChanged();
+    void cellularConnected(bool connected);
 
 private:
     void emitLocationChanged();
@@ -194,6 +200,10 @@ private:
     DeviceControl *m_deviceControl;
 
     NetworkManager *m_networkManager;
+    NetworkTechnology *m_cellularTechnology;
+
+    QOfonoManager *m_ofonoManager;
+    QOfonoConnectionManager *m_connectionManager;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)
