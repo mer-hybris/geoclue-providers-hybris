@@ -24,6 +24,8 @@
 #include <qofonomanager.h>
 #include <qofonoconnectionmanager.h>
 #include <qofonoconnectioncontext.h>
+#include <qofonoradiosettings.h>
+#include <qofononetworkregistration.h>
 
 #include <mlite5/MGConfItem>
 
@@ -36,6 +38,7 @@ HybrisProvider *staticProvider = 0;
 
 const int QuitIdleTime = 30000;
 const int FixTimeout = 30000;
+const int UmtsTimeout = 30000;
 const quint32 MinimumInterval = 1000;
 const quint32 PreferredAccuracy = 0;
 const quint32 PreferredInitialFixTime = 0;
@@ -353,7 +356,9 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_requestedConnect(false), m_gpsStarted(false), m_deviceControl(0),
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(0),
     m_ofonoManager(new QOfonoManager(this)),
-    m_connectionManager(new QOfonoConnectionManager(this))
+    m_connectionManager(new QOfonoConnectionManager(this)),
+    m_radioSettings(new QOfonoRadioSettings(this)),
+    m_networkRegistration(new QOfonoNetworkRegistration(this)), m_pendingUmtsLimit(false)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -402,6 +407,9 @@ HybrisProvider::HybrisProvider(QObject *parent)
 
     m_connectionSelector = new ComJollaLipstickConnectionSelectorIfInterface(
         QStringLiteral("com.jolla.lipstick.ConnectionSelector"), QStringLiteral("/"), connection);
+
+    connect(m_networkRegistration, SIGNAL(technologyChanged(QString)),
+            this, SLOT(mobileDataTechnologyChanged(QString)));
 
     m_idleTimer.start(QuitIdleTime, this);
 
@@ -629,6 +637,8 @@ void HybrisProvider::timerEvent(QTimerEvent *event)
     } else if (event->timerId() == m_fixLostTimer.timerId()) {
         m_fixLostTimer.stop();
         setStatus(StatusAcquiring);
+    } else if (event->timerId() == m_umtsTimer.timerId()) {
+        unlimitUmts();
     } else {
         QObject::timerEvent(event);
     }
@@ -651,6 +661,9 @@ void HybrisProvider::setLocation(const Location &location)
     setStatus(StatusAvailable);
     m_currentLocation = location;
     emitLocationChanged();
+
+    if (!qIsNaN(location.latitude()) && !qIsNaN(location.longitude()))
+        unlimitUmts();
 }
 
 void HybrisProvider::setSatellite(const QList<SatelliteInfo> &satellites, const QList<int> &used)
@@ -900,12 +913,22 @@ void HybrisProvider::ofonoModemsChanged()
         modem = modems.first();
 
     m_connectionManager->setModemPath(modem);
+    m_radioSettings->setModemPath(modem);
+    m_networkRegistration->setModemPath(modem);
 }
 
 void HybrisProvider::cellularConnected(bool connected)
 {
     if (connected)
         dataServiceConnected();
+}
+
+void HybrisProvider::mobileDataTechnologyChanged(const QString &technology)
+{
+    if (m_pendingUmtsLimit && technology != QLatin1String("lte")) {
+        m_pendingUmtsLimit = false;
+        startGpsDevice();
+    }
 }
 
 void HybrisProvider::emitLocationChanged()
@@ -985,7 +1008,15 @@ void HybrisProvider::startPositioningIfNeeded()
     // Assist GPS by injecting current time.
     injectUtcTime();
 
-    error = m_gps->start();
+    // Limit mobile data technology to umts.
+    m_pendingUmtsLimit = limitUmts();
+    if (!m_pendingUmtsLimit)
+        startGpsDevice();
+}
+
+void HybrisProvider::startGpsDevice()
+{
+    int error = m_gps->start();
     if (error) {
         qWarning("Failed to start positioning, error %d\n", error);
         setStatus(StatusError);
@@ -1022,6 +1053,8 @@ void HybrisProvider::stopPositioningIfNeeded()
         m_gpsStarted = false;
         setStatus(StatusUnavailable);
     }
+
+    unlimitUmts();
 
     m_fixLostTimer.stop();
 
@@ -1078,8 +1111,45 @@ quint32 HybrisProvider::minimumRequestedUpdateInterval() const
     return qMax(updateInterval, MinimumInterval);
 }
 
+bool HybrisProvider::limitUmts()
+{
+    if (!m_previousTechnologyPreference.isEmpty())
+        return false;
+
+    m_previousTechnologyPreference = m_radioSettings->technologyPreference();
+
+    if (m_previousTechnologyPreference == QLatin1String("any") ||
+        m_previousTechnologyPreference == QLatin1String("lte")) {
+        qWarning("Limiting mobile data to umts technology.");
+
+        bool usingLte = m_networkRegistration->technology() == QLatin1String("lte");
+        m_radioSettings->setTechnologyPreference(QStringLiteral("umts"));
+
+        m_umtsTimer.start(UmtsTimeout, this);
+
+        return usingLte;
+    } else {
+        m_previousTechnologyPreference.clear();
+        return false;
+    }
+}
+
+void HybrisProvider::unlimitUmts()
+{
+    if (m_previousTechnologyPreference.isEmpty())
+        return;
+
+    m_umtsTimer.stop();
+
+    qWarning("Restoring mobile data technology preference.");
+    m_radioSettings->setTechnologyPreference(m_previousTechnologyPreference);
+    m_previousTechnologyPreference.clear();
+}
+
 void HybrisProvider::startDataConnection()
 {
+    m_umtsTimer.stop();
+
     // Check if existing cellular network service is connected
     NetworkTechnology *technology = m_networkManager->getTechnology(QStringLiteral("cellular"));
     if (technology && technology->connected()) {
@@ -1099,6 +1169,8 @@ void HybrisProvider::startDataConnection()
 
 void HybrisProvider::stopDataConnection()
 {
+    unlimitUmts();
+
     if (!m_requestedConnect)
         return;
 
