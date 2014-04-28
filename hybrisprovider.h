@@ -29,8 +29,6 @@ class NetworkManager;
 class NetworkTechnology;
 class QOfonoManager;
 class QOfonoConnectionManager;
-class QOfonoRadioSettings;
-class QOfonoNetworkRegistration;
 
 class HybrisProvider : public QObject, public QDBusContext
 {
@@ -133,20 +131,16 @@ private slots:
     void technologiesChanged();
     void ofonoModemsChanged();
     void cellularConnected(bool connected);
-    void mobileDataTechnologyChanged(const QString &technology);
 
 private:
     void emitLocationChanged();
     void emitSatelliteChanged();
     void startPositioningIfNeeded();
     void stopPositioningIfNeeded();
-    void startGpsDevice();
     void setStatus(Status status);
     bool positioningEnabled();
     quint32 minimumRequestedUpdateInterval() const;
 
-    bool limitUmts();
-    void unlimitUmts();
     void startDataConnection();
     void stopDataConnection();
 
@@ -213,11 +207,6 @@ private:
 
     QOfonoManager *m_ofonoManager;
     QOfonoConnectionManager *m_connectionManager;
-    QOfonoRadioSettings *m_radioSettings;
-    QOfonoNetworkRegistration *m_networkRegistration;
-    QString m_previousTechnologyPreference;
-    bool m_pendingUmtsLimit;
-    QBasicTimer m_umtsTimer;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)
