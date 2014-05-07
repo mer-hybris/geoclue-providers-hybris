@@ -521,6 +521,9 @@ void HybrisProvider::RemoveReference()
         m_watchedServices.remove(service);
     }
 
+    if (m_watchedServices.isEmpty())
+        m_idleTimer.start(QuitIdleTime, this);
+
     stopPositioningIfNeeded();
 }
 
@@ -646,9 +649,11 @@ void HybrisProvider::setLocation(const Location &location)
         m_positionInjectionConnected = false;
     }
 
-    m_fixLostTimer.start(FixTimeout, this);
+    if (location.timestamp() != 0) {
+        setStatus(StatusAvailable);
+        m_fixLostTimer.start(FixTimeout, this);
+    }
 
-    setStatus(StatusAvailable);
     m_currentLocation = location;
     emitLocationChanged();
 }
@@ -669,6 +674,10 @@ void HybrisProvider::serviceUnregistered(const QString &service)
 {
     m_watchedServices.remove(service);
     m_watcher->removeWatchedService(service);
+
+    if (m_watchedServices.isEmpty())
+        m_idleTimer.start(QuitIdleTime, this);
+
     stopPositioningIfNeeded();
 }
 
@@ -1024,9 +1033,6 @@ void HybrisProvider::stopPositioningIfNeeded()
     }
 
     m_fixLostTimer.stop();
-
-    if (m_watchedServices.isEmpty())
-        m_idleTimer.start(QuitIdleTime, this);
 }
 
 void HybrisProvider::setStatus(HybrisProvider::Status status)
