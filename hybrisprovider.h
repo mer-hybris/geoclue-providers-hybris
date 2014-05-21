@@ -21,6 +21,9 @@ QT_FORWARD_DECLARE_CLASS(QFileSystemWatcher)
 QT_FORWARD_DECLARE_CLASS(QDBusServiceWatcher)
 QT_FORWARD_DECLARE_CLASS(QNetworkAccessManager)
 QT_FORWARD_DECLARE_CLASS(QHostAddress)
+QT_FORWARD_DECLARE_CLASS(QUdpSocket)
+QT_FORWARD_DECLARE_CLASS(QHostInfo)
+
 class ComJollaConnectiondInterface;
 class ComJollaLipstickConnectionSelectorIfInterface;
 class MGConfItem;
@@ -113,6 +116,8 @@ private slots:
     void injectPosition(int fields, int timestamp, double latitude, double longitude,
                         double altitude, const Accuracy &accuracy);
     void injectUtcTime();
+    void sendNtpRequest(const QHostInfo &host);
+    void handleNtpResponse();
     void xtraDownloadRequest();
     void xtraDownloadRequestSendNext();
     void xtraDownloadFailed(QNetworkReply::NetworkError error);
@@ -143,6 +148,8 @@ private:
 
     void startDataConnection();
     void stopDataConnection();
+
+    void sendNtpRequest();
 
     gps_device_t *m_gpsDevice;
 
@@ -207,6 +214,12 @@ private:
 
     QOfonoManager *m_ofonoManager;
     QOfonoConnectionManager *m_connectionManager;
+
+    QUdpSocket *m_ntpSocket;
+    QBasicTimer m_ntpRetryTimer;
+    QStringList m_ntpServers;
+    qint64 m_ntpRequestTime;
+    qint64 m_ntpRequestTicks;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)
