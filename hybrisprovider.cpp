@@ -17,6 +17,8 @@
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkReply>
 #include <QtNetwork/QHostAddress>
+#include <QtNetwork/QUdpSocket>
+#include <QtNetwork/QHostInfo>
 
 #include <networkmanager.h>
 #include <networkservice.h>
@@ -26,6 +28,9 @@
 #include <qofonoconnectioncontext.h>
 
 #include <mlite5/MGConfItem>
+
+#include <strings.h>
+#include <sys/time.h>
 
 Q_DECLARE_METATYPE(QHostAddress)
 
@@ -353,7 +358,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_requestedConnect(false), m_gpsStarted(false), m_deviceControl(0),
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(0),
     m_ofonoManager(new QOfonoManager(this)),
-    m_connectionManager(new QOfonoConnectionManager(this))
+    m_connectionManager(new QOfonoConnectionManager(this)), m_ntpSocket(0)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -632,6 +637,8 @@ void HybrisProvider::timerEvent(QTimerEvent *event)
     } else if (event->timerId() == m_fixLostTimer.timerId()) {
         m_fixLostTimer.stop();
         setStatus(StatusAcquiring);
+    } else if (event->timerId() == m_ntpRetryTimer.timerId()) {
+        sendNtpRequest();
     } else {
         QObject::timerEvent(event);
     }
@@ -706,8 +713,120 @@ void HybrisProvider::injectPosition(int fields, int timestamp, double latitude, 
 
 void HybrisProvider::injectUtcTime()
 {
-    qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
-    m_gps->inject_time(currentTime, currentTime, 0);
+    NetworkService *service = m_networkManager->defaultRoute();
+    if (!service)
+        return;
+
+    m_ntpServers = service->timeservers();
+    if (m_ntpServers.isEmpty())
+        return;
+
+    if (!m_ntpSocket) {
+        m_ntpSocket = new QUdpSocket(this);
+        connect(m_ntpSocket, SIGNAL(readyRead()), this, SLOT(handleNtpResponse()));
+        m_ntpSocket->bind();
+    }
+
+    m_ntpRetryTimer.start(10000, this);
+
+    sendNtpRequest();
+}
+
+struct NtpShort {
+    quint16 seconds;
+    quint16 fraction;
+} __attribute__ ((packed));
+
+#define SECONDS_FROM_1900_TO_1970 2208988800UL
+
+struct NtpTime {
+    quint32 seconds;
+    quint32 fraction;
+
+    void set(const timeval &time) {
+        // seconds since 1900
+        seconds = qToBigEndian<quint32>(time.tv_sec + SECONDS_FROM_1900_TO_1970);
+        // fraction of a second
+        fraction = qToBigEndian<quint32>(time.tv_usec * 1000);
+    }
+
+    qint64 toMSecsSinceEpoc() const {
+        qint64 msec = qint64(qFromBigEndian<quint32>(seconds) - SECONDS_FROM_1900_TO_1970) * 1000 +
+                      1000 * qFromBigEndian<quint32>(fraction) / std::numeric_limits<quint32>::max();
+        return msec;
+    }
+
+} __attribute__ ((packed));
+
+struct NtpMessage {
+    quint8 flags;
+    quint8 stratum;
+    qint8 poll;
+    qint8 precision;
+    NtpShort rootDelay;
+    NtpShort rootDispersion;
+    quint32 referenceId;
+    NtpTime referenceTimestamp;
+    NtpTime originTimestamp;
+    NtpTime receiveTimestamp;
+    NtpTime transmitTimestamp;
+} __attribute__ ((packed));
+
+void HybrisProvider::sendNtpRequest(const QHostInfo &host)
+{
+    if (host.error() != QHostInfo::NoError)
+        return;
+
+    if (host.addresses().isEmpty())
+        return;
+
+    QHostAddress address = host.addresses().first();
+
+    NtpMessage request;
+    bzero(&request, sizeof(NtpMessage));
+
+    // client mode (3) and version (3)
+    request.flags = 3 | (3 << 3);
+
+    timeval ntpRequestTime;
+    gettimeofday(&ntpRequestTime, 0);
+
+    timespec ticks;
+    clock_gettime(CLOCK_MONOTONIC, &ticks);
+    m_ntpRequestTicks = ticks.tv_sec + ticks.tv_nsec / 1000000;
+
+    request.transmitTimestamp.set(ntpRequestTime);
+    m_ntpRequestTime = request.transmitTimestamp.toMSecsSinceEpoc();
+
+    m_ntpSocket->writeDatagram(reinterpret_cast<const char *>(&request), sizeof(NtpMessage),
+                               address, 123);
+}
+
+void HybrisProvider::handleNtpResponse()
+{
+    while (m_ntpSocket->hasPendingDatagrams()) {
+        NtpMessage response;
+
+        timespec ticks;
+        clock_gettime(CLOCK_MONOTONIC, &ticks);
+        qint64 ntpResponseTicks = ticks.tv_sec + ticks.tv_nsec / 1000000;
+
+        m_ntpSocket->readDatagram(reinterpret_cast<char *>(&response), sizeof(NtpMessage));
+
+        qint64 responseTime = m_ntpRequestTime + (ntpResponseTicks - m_ntpRequestTicks);
+        qint64 transmitTime = response.transmitTimestamp.toMSecsSinceEpoc();
+        qint64 receiveTime = response.receiveTimestamp.toMSecsSinceEpoc();
+        qint64 originTime = response.originTimestamp.toMSecsSinceEpoc();
+        qint64 clockOffset = ((receiveTime - originTime) + (transmitTime - responseTime))/2;
+
+        qint64 time = responseTime + clockOffset;
+        qint64 reference = ntpResponseTicks;
+        int certainty = (ntpResponseTicks - m_ntpRequestTicks - (transmitTime - receiveTime)) / 2;
+
+        m_gps->inject_time(time, reference, certainty);
+
+        m_ntpRetryTimer.stop();
+    }
 }
 
 void HybrisProvider::xtraDownloadRequest()
@@ -991,9 +1110,6 @@ void HybrisProvider::startPositioningIfNeeded()
         return;
     }
 
-    // Assist GPS by injecting current time.
-    injectUtcTime();
-
     error = m_gps->start();
     if (error) {
         qWarning("Failed to start positioning, error %d\n", error);
@@ -1120,4 +1236,16 @@ void HybrisProvider::stopDataConnection()
         service.requestDisconnect();
         m_networkServicePath.clear();
     }
+}
+
+void HybrisProvider::sendNtpRequest()
+{
+    if (m_ntpServers.isEmpty())
+        return;
+
+    QString server = m_ntpServers.takeFirst();
+    QHostInfo::lookupHost(server, this, SLOT(sendNtpRequest(QHostInfo)));
+
+    if (m_ntpServers.isEmpty())
+        m_ntpRetryTimer.stop();
 }

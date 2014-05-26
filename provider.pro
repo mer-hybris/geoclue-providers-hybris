@@ -10,7 +10,7 @@ QT = core dbus network
 CONFIG += link_pkgconfig
 PKGCONFIG += libhardware android-headers connman-qt5 qofono-qt5 mlite5
 
-LIBS += -L. -lhybris_dbus -lcontrol_dbus
+LIBS += -lrt -L. -lhybris_dbus -lcontrol_dbus
 
 DBUS_INTERFACES = \
     com.jollamobile.Connectiond.xml \
