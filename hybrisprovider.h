@@ -220,6 +220,8 @@ private:
     QStringList m_ntpServers;
     qint64 m_ntpRequestTime;
     qint64 m_ntpRequestTicks;
+
+    bool m_hereEnabled;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)

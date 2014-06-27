@@ -358,7 +358,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_requestedConnect(false), m_gpsStarted(false), m_deviceControl(0),
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(0),
     m_ofonoManager(new QOfonoManager(this)),
-    m_connectionManager(new QOfonoConnectionManager(this)), m_ntpSocket(0)
+    m_connectionManager(new QOfonoConnectionManager(this)), m_ntpSocket(0), m_hereEnabled(false)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -900,6 +900,11 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
     Q_UNUSED(ssid)
     Q_UNUSED(password)
 
+    if (!m_hereEnabled) {
+        m_agps->data_conn_failed(AGPS_TYPE_SUPL);
+        return;
+    }
+
     if (type != AGPS_TYPE_SUPL) {
         qWarning("Only SUPL AGPS is supported.");
         return;
@@ -1100,7 +1105,8 @@ void HybrisProvider::startPositioningIfNeeded()
                          this, SLOT(injectPosition(int,int,double,double,double,Accuracy)));
     }
 
-    int error = m_gps->set_position_mode(GPS_POSITION_MODE_MS_BASED,
+    int error = m_gps->set_position_mode(m_hereEnabled ? GPS_POSITION_MODE_MS_BASED
+                                                       : GPS_POSITION_MODE_STANDALONE,
                                          GPS_POSITION_RECURRENCE_PERIODIC,
                                          minimumRequestedUpdateInterval(),
                                          PreferredAccuracy, PreferredInitialFixTime);
@@ -1170,6 +1176,7 @@ bool HybrisProvider::positioningEnabled()
     QSettings settings(LocationSettingsFile, QSettings::IniFormat);
 
     bool enabled = settings.value(QStringLiteral("location/enabled"), false).toBool();
+    m_hereEnabled = settings.value(QStringLiteral("location/agreement_accepted"), false).toBool();
 
     bool powered = m_deviceControl->powered();
 
