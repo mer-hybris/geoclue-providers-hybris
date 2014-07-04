@@ -560,7 +560,8 @@ void HybrisProvider::SetOptions(const QVariantMap &options)
 
         quint32 updateInterval = minimumRequestedUpdateInterval();
 
-        int error = m_gps->set_position_mode(GPS_POSITION_MODE_MS_BASED,
+        int error = m_gps->set_position_mode(m_hereEnabled ? GPS_POSITION_MODE_MS_BASED
+                                                           : GPS_POSITION_MODE_STANDALONE,
                                              GPS_POSITION_RECURRENCE_PERIODIC, updateInterval,
                                              PreferredAccuracy, PreferredInitialFixTime);
         if (error) {
@@ -1174,9 +1175,19 @@ void HybrisProvider::setStatus(HybrisProvider::Status status)
 bool HybrisProvider::positioningEnabled()
 {
     QSettings settings(LocationSettingsFile, QSettings::IniFormat);
+    settings.beginGroup(QStringLiteral("location"));
 
-    bool enabled = settings.value(QStringLiteral("location/enabled"), false).toBool();
-    m_hereEnabled = settings.value(QStringLiteral("location/agreement_accepted"), false).toBool();
+    bool enabled = settings.value(QStringLiteral("enabled"), false).toBool();
+
+    // Setting names are a bit confusing, agreement_accepted is what the HERE daemons check and is
+    // used to toggle use of the HERE services on and off. here_agreement_accepted is that actual
+    // acceptance state of the agreement. Both need to be true. HERE provides the SUPL service and
+    // needs to be enabled for assisted GPS.
+    bool hereEnabled = settings.value(QStringLiteral("agreement_accepted"), false).toBool();
+    bool hereAccepted = hereEnabled;
+    if (settings.contains(QStringLiteral("here_agreement_accepted")))
+        hereAccepted = settings.value(QStringLiteral("here_agreement_accepted"), false).toBool();
+    m_hereEnabled = hereAccepted && hereEnabled;
 
     bool powered = m_deviceControl->powered();
 
