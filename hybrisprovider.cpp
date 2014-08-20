@@ -27,12 +27,13 @@
 #include <qofonoconnectionmanager.h>
 #include <qofonoconnectioncontext.h>
 
-#include <mlite5/MGConfItem>
-
 #include <strings.h>
 #include <sys/time.h>
 
 #include <android-version.h>
+
+#include <QDBusMessage>
+#include <QDBusConnection>
 
 Q_DECLARE_METATYPE(QHostAddress)
 
@@ -386,9 +387,6 @@ HybrisProvider::HybrisProvider(QObject *parent)
     connect(m_locationSettings, SIGNAL(fileChanged(QString)),
             this, SLOT(locationEnabledChanged()));
     m_locationSettings->addPath(LocationSettingsFile);
-
-    m_magneticVariation =
-        new MGConfItem(QStringLiteral("/system/osso/location/settings/magneticvariation"), this);
 
     new GeoclueAdaptor(this);
     new PositionAdaptor(this);
@@ -1015,11 +1013,15 @@ void HybrisProvider::connectionSelected(bool selected)
 
 void HybrisProvider::setMagneticVariation(double variation)
 {
-    double magneticVariation = m_magneticVariation->value(0.0).toDouble();
-    if (magneticVariation == variation)
-        return;
-
-    m_magneticVariation->set(variation);
+    if (m_magneticVariation != variation) {
+        QDBusMessage msg = QDBusMessage::createMethodCall(QStringLiteral("com.nokia.SensorService"),
+                                                          QStringLiteral("/SensorManager"),
+                                                          QStringLiteral("local.SensorManager"),
+                                                          QStringLiteral("setMagneticDeviation"));
+        msg.setArguments(QList<QVariant>() << variation);
+        QDBusConnection::systemBus().call(msg, QDBus::NoBlock);
+        m_magneticVariation = variation;
+    }
 }
 
 void HybrisProvider::engineOn()
