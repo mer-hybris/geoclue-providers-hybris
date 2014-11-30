@@ -32,6 +32,8 @@
 #include <strings.h>
 #include <sys/time.h>
 
+#include <android-version.h>
+
 Q_DECLARE_METATYPE(QHostAddress)
 
 namespace
@@ -209,10 +211,19 @@ void requestUtcTimeCallback()
 
 void agpsStatusCallback(AGpsStatus *status)
 {
+#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+    QHostAddress ipv4(status->ipaddr);
+    // These are currently defined as Q_UNUSED in agpsStatus thus, defining these
+    // as empty should be ok.
+    // TODO: if these get some use later this needs to be rechecked.
+    QByteArray ssid("");
+    QByteArray password("");
+#else
     QHostAddress ipv4(status->ipv4_addr);
-    QHostAddress ipv6;
     QByteArray ssid(status->ssid, SSID_BUF_SIZE);
     QByteArray password(status->password, SSID_BUF_SIZE);
+#endif
+    QHostAddress ipv6;
 
     QMetaObject::invokeMethod(staticProvider, "agpsStatus", Q_ARG(qint16, status->type),
                               Q_ARG(quint16, status->status), Q_ARG(QHostAddress, ipv4),
@@ -896,13 +907,19 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
                                 const QHostAddress &ipv6, const QByteArray &ssid,
                                 const QByteArray &password)
 {
+    // TODO: It these get in use later please check also agpsStatusCallback for giving
+    // proper values.
     Q_UNUSED(ipv4)
     Q_UNUSED(ipv6)
     Q_UNUSED(ssid)
     Q_UNUSED(password)
 
     if (!m_hereEnabled) {
+#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+        m_agps->data_conn_failed();
+#else
         m_agps->data_conn_failed(AGPS_TYPE_SUPL);
+#endif
         return;
     }
 
@@ -917,7 +934,11 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
         break;
     case GPS_RELEASE_AGPS_DATA_CONN:
         // Immediately inform that connection is closed.
+#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+        m_agps->data_conn_closed();
+#else
         m_agps->data_conn_closed(AGPS_TYPE_SUPL);
+#endif
         stopDataConnection();
         break;
     case GPS_AGPS_DATA_CONNECTED:
@@ -960,7 +981,11 @@ void HybrisProvider::dataServiceConnected()
         if (connectionContext.settings().value(QStringLiteral("Interface")) == interface) {
             const QByteArray apn = connectionContext.accessPointName().toLocal8Bit();
             m_networkServicePath = service->path();
+#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+            m_agps->data_conn_open(apn.constData());
+#else
             m_agps->data_conn_open(AGPS_TYPE_SUPL, apn.constData(), AGPS_APN_BEARER_IPV4);
+#endif
             break;
         }
     }
@@ -971,13 +996,21 @@ void HybrisProvider::connectionErrorReported(const QString &path, const QString 
     Q_UNUSED(error)
 
     if (path.contains(QStringLiteral("cellular")))
+#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+        m_agps->data_conn_failed();
+#else
         m_agps->data_conn_failed(AGPS_TYPE_SUPL);
+#endif
 }
 
 void HybrisProvider::connectionSelected(bool selected)
 {
     if (!selected)
+#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+        m_agps->data_conn_failed();
+#else
         m_agps->data_conn_failed(AGPS_TYPE_SUPL);
+#endif
 }
 
 void HybrisProvider::setMagneticVariation(double variation)
