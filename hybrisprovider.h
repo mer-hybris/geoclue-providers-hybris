@@ -13,7 +13,7 @@
 #include <QtDBus/QDBusContext>
 #include <QtNetwork/QNetworkReply>
 
-#include <android/hardware/gps.h>
+#include <hardware/gps.h>
 
 #include "locationtypes.h"
 
