@@ -203,8 +203,6 @@ private:
     QString m_networkServicePath;
     bool m_requestedConnect;
 
-    MGConfItem *m_magneticVariation;
-
     bool m_gpsStarted;
 
     DeviceControl *m_deviceControl;
@@ -222,6 +220,7 @@ private:
     qint64 m_ntpRequestTicks;
 
     bool m_hereEnabled;
+    double m_magneticVariation;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)

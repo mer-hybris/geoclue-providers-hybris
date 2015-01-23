@@ -13,7 +13,6 @@ BuildRequires: pkgconfig(libhardware)
 BuildRequires: pkgconfig(android-headers)
 BuildRequires: pkgconfig(connman-qt5) >= 1.0.68
 BuildRequires: pkgconfig(qofono-qt5)
-BuildRequires: pkgconfig(mlite5)
 Requires: connectionagent-qt5 >= 0.9.20
 
 %description
@@ -33,6 +32,7 @@ make %{?_smp_mflags}
 make INSTALL_ROOT=%{buildroot} install
 
 %post -p /sbin/ldconfig
+/usr/bin/dconf reset -f /system/osso/location/settings/magneticvariation
 
 %postun -p /sbin/ldconfig
 
