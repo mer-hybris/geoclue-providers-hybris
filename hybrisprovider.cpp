@@ -42,7 +42,7 @@ namespace
 HybrisProvider *staticProvider = 0;
 
 const int QuitIdleTime = 30000;
-const int FixTimeout = 30000;
+const int FixTimeout = 300000;
 const quint32 MinimumInterval = 1000;
 const quint32 PreferredAccuracy = 0;
 const quint32 PreferredInitialFixTime = 0;
