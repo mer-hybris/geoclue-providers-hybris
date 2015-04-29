@@ -58,7 +58,9 @@ void locationCallback(GpsLocation *location)
 
     if (location->flags & GPS_LOCATION_HAS_LAT_LONG) {
         loc.setLatitude(location->latitude);
+	qWarning("latitude %d\n",location->latitude);
         loc.setLongitude(location->longitude);
+	qWarning("longitude %d\n",location->longitude);
     }
 
     if (location->flags & GPS_LOCATION_HAS_ALTITUDE)
@@ -80,19 +82,33 @@ void locationCallback(GpsLocation *location)
     QMetaObject::invokeMethod(staticProvider, "setLocation", Q_ARG(Location, loc));
 }
 
+
 void statusCallback(GpsStatus *status)
 {
     switch (status->status) {
     case GPS_STATUS_ENGINE_ON:
         QMetaObject::invokeMethod(staticProvider, "engineOn");
+        qWarning("engineOn");
         break;
     case GPS_STATUS_ENGINE_OFF:
         QMetaObject::invokeMethod(staticProvider, "engineOff");
+        qWarning("engineOff");
         break;
+    case GPS_STATUS_NONE:
+        qWarning("no gps\n");
+        break;
+    case GPS_STATUS_SESSION_BEGIN:
+        qWarning("session begin\n");
+        break;
+    case GPS_STATUS_SESSION_END:
+        qWarning("session end\n");
+        break;
+
     default:
         ;
     }
 }
+
 
 void svStatusCallback(GpsSvStatus *svStatus)
 {
@@ -155,6 +171,7 @@ void parseRmc(const QByteArray &nmea)
 void nmeaCallback(GpsUtcTime timestamp, const char *nmeaData, int length)
 {
     Q_UNUSED(timestamp)
+    qWarning("nmeaCallback");
 
     // Trim trailing whitepsace
     while (length > 0 && isspace(nmeaData[length-1]))
@@ -177,6 +194,7 @@ void nmeaCallback(GpsUtcTime timestamp, const char *nmeaData, int length)
 
 void setCapabilitiesCallback(uint32_t capabilities)
 {
+    qWarning("capability is %.8x\n", capabilities);
     Q_UNUSED(capabilities)
 }
 
@@ -206,7 +224,9 @@ pthread_t createThreadCallback(const char *name, void (*start)(void *), void *ar
 
 void requestUtcTimeCallback()
 {
+#if 0
     QMetaObject::invokeMethod(staticProvider, "injectUtcTime");
+#endif
 }
 
 void agpsStatusCallback(AGpsStatus *status)
