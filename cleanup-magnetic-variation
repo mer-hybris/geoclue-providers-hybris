@@ -1,0 +1,4 @@
+#!/bin/sh
+
+/usr/bin/dconf reset -f /system/osso/location/settings/magneticvariation
+
