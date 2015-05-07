@@ -14,6 +14,8 @@ BuildRequires: pkgconfig(android-headers)
 BuildRequires: pkgconfig(connman-qt5) >= 1.0.68
 BuildRequires: pkgconfig(qofono-qt5)
 Requires: connectionagent-qt5 >= 0.9.20
+Requires: oneshot
+%_oneshot_requires_post
 
 %description
 %{summary}.
@@ -30,11 +32,11 @@ make %{?_smp_mflags}
 
 %install
 make INSTALL_ROOT=%{buildroot} install
+mkdir -p %{buildroot}/%{_oneshotdir}
+cp -a cleanup-magnetic-variation %{buildroot}/%{_oneshotdir}
 
-%post -p /sbin/ldconfig
-/usr/bin/dconf reset -f /system/osso/location/settings/magneticvariation
-
-%postun -p /sbin/ldconfig
+%post
+%{_bindir}/add-oneshot --user --late cleanup-magnetic-variation
 
 %files
 %defattr(04755,root,root,-)
@@ -43,4 +45,5 @@ make INSTALL_ROOT=%{buildroot} install
 %{_sysconfdir}/dbus-1
 %{_datadir}/dbus-1
 %{_datadir}/geoclue-providers/geoclue-hybris.provider
+%attr(755, root, root) %{_oneshotdir}/cleanup-magnetic-variation
 
