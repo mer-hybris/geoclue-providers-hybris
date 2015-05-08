@@ -206,7 +206,8 @@ pthread_t createThreadCallback(const char *name, void (*start)(void *), void *ar
 
 void requestUtcTimeCallback()
 {
-    QMetaObject::invokeMethod(staticProvider, "injectUtcTime");
+    qWarning() << "Ignoring request to inject UTC time to GPS";
+    //QMetaObject::invokeMethod(staticProvider, "injectUtcTime");
 }
 
 void agpsStatusCallback(AGpsStatus *status)
