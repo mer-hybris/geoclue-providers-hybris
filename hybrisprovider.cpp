@@ -803,7 +803,7 @@ void HybrisProvider::sendNtpRequest(const QHostInfo &host)
 
     timespec ticks;
     clock_gettime(CLOCK_MONOTONIC, &ticks);
-    m_ntpRequestTicks = ticks.tv_sec + ticks.tv_nsec / 1000000;
+    m_ntpRequestTicks = 1000*ticks.tv_sec + ticks.tv_nsec/1000000;
 
     request.transmitTimestamp.set(ntpRequestTime);
     m_ntpRequestTime = request.transmitTimestamp.toMSecsSinceEpoc();
@@ -819,7 +819,7 @@ void HybrisProvider::handleNtpResponse()
 
         timespec ticks;
         clock_gettime(CLOCK_MONOTONIC, &ticks);
-        qint64 ntpResponseTicks = ticks.tv_sec + ticks.tv_nsec / 1000000;
+        qint64 ntpResponseTicks = 1000*ticks.tv_sec + ticks.tv_nsec/1000000;
 
         m_ntpSocket->readDatagram(reinterpret_cast<char *>(&response), sizeof(NtpMessage));
 
