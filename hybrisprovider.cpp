@@ -844,7 +844,7 @@ void HybrisProvider::xtraDownloadRequest()
     if (m_xtraDownloadReply)
         return;
 
-    QFile gpsConf(QStringLiteral("/etc/gps.conf"));
+    QFile gpsConf(QStringLiteral("/system/etc/gps.conf"));
     if (!gpsConf.open(QIODevice::ReadOnly))
         return;
 
