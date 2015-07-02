@@ -14,6 +14,7 @@
 #include "connectiond_interface.h"
 #include "connectionselector_interface.h"
 
+#include <QtCore/QLoggingCategory>
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkReply>
 #include <QtNetwork/QHostAddress>
@@ -36,6 +37,10 @@
 #include <QDBusConnection>
 
 Q_DECLARE_METATYPE(QHostAddress)
+
+Q_LOGGING_CATEGORY(lcGeoclueHybris, "geoclue.provider.hybris")
+Q_LOGGING_CATEGORY(lcGeoclueHybrisNmea, "geoclue.provider.hybris.nmea")
+Q_LOGGING_CATEGORY(lcGeoclueHybrisPosition, "geoclue.provider.hybris.position")
 
 namespace
 {
@@ -155,8 +160,6 @@ void parseRmc(const QByteArray &nmea)
 
 void nmeaCallback(GpsUtcTime timestamp, const char *nmeaData, int length)
 {
-    Q_UNUSED(timestamp)
-
     // Trim trailing whitepsace
     while (length > 0 && isspace(nmeaData[length-1]))
         --length;
@@ -165,6 +168,8 @@ void nmeaCallback(GpsUtcTime timestamp, const char *nmeaData, int length)
         return;
 
     QByteArray nmea = QByteArray::fromRawData(nmeaData, length);
+
+    qCDebug(lcGeoclueHybrisNmea) << timestamp << nmea;
 
     if (!nmeaChecksumValid(nmea))
         return;
@@ -178,7 +183,7 @@ void nmeaCallback(GpsUtcTime timestamp, const char *nmeaData, int length)
 
 void setCapabilitiesCallback(uint32_t capabilities)
 {
-    Q_UNUSED(capabilities)
+    qCDebug(lcGeoclueHybris) << "capabilities" << showbase << hex << capabilities;
 }
 
 void acquireWakelockCallback()
@@ -207,6 +212,8 @@ pthread_t createThreadCallback(const char *name, void (*start)(void *), void *ar
 
 void requestUtcTimeCallback()
 {
+    qCDebug(lcGeoclueHybris);
+
     QMetaObject::invokeMethod(staticProvider, "injectUtcTime");
 }
 
@@ -235,16 +242,19 @@ void agpsStatusCallback(AGpsStatus *status)
 void gpsNiNotifyCallback(GpsNiNotification *notification)
 {
     Q_UNUSED(notification)
+    qCDebug(lcGeoclueHybris);
 }
 
 void agpsRilRequestSetId(uint32_t flags)
 {
     Q_UNUSED(flags)
+    qCDebug(lcGeoclueHybris) << "flags" << showbase << hex << flags;
 }
 
 void agpsRilRequestRefLoc(uint32_t flags)
 {
     Q_UNUSED(flags)
+    qCDebug(lcGeoclueHybris) << "flags" << showbase << hex << flags;
 }
 
 void gpsXtraDownloadRequest()
@@ -656,6 +666,9 @@ void HybrisProvider::timerEvent(QTimerEvent *event)
 
 void HybrisProvider::setLocation(const Location &location)
 {
+    qCDebug(lcGeoclueHybrisPosition) << location.timestamp() << location.latitude()
+                                     << location.longitude() << location.altitude();
+
     // Stop listening to all PositionChanged signals from org.freedesktop.Geoclue.Position
     // interfaces.
     if (m_positionInjectionConnected) {
@@ -718,18 +731,29 @@ void HybrisProvider::injectPosition(int fields, int timestamp, double latitude, 
     if (!(positionFields & LatitudePresent && positionFields & LongitudePresent))
         return;
 
+    qCDebug(lcGeoclueHybris) << fields << timestamp << latitude << longitude << altitude
+                             << accuracy.horizontal() << accuracy.vertical();
+
     m_gps->inject_location(latitude, longitude, accuracy.horizontal());
 }
 
 void HybrisProvider::injectUtcTime()
 {
+    qCDebug(lcGeoclueHybris) << "Time injection requested";
+
     NetworkService *service = m_networkManager->defaultRoute();
-    if (!service)
+    if (!service) {
+        qCDebug(lcGeoclueHybris) << "No default network service";
         return;
+    }
 
     m_ntpServers = service->timeservers();
-    if (m_ntpServers.isEmpty())
+    if (m_ntpServers.isEmpty()) {
+        qCDebug(lcGeoclueHybris) << service->name() << "doesn't advertise time servers";
         return;
+    } else {
+        qCDebug(lcGeoclueHybris) << "Available time servers:" << m_ntpServers;
+    }
 
     if (!m_ntpSocket) {
         m_ntpSocket = new QUdpSocket(this);
@@ -790,6 +814,8 @@ void HybrisProvider::sendNtpRequest(const QHostInfo &host)
     if (host.addresses().isEmpty())
         return;
 
+    qCDebug(lcGeoclueHybris) << "Sending NTP request to" << host.addresses().first();
+
     QHostAddress address = host.addresses().first();
 
     NtpMessage request;
@@ -821,7 +847,12 @@ void HybrisProvider::handleNtpResponse()
         clock_gettime(CLOCK_MONOTONIC, &ticks);
         qint64 ntpResponseTicks = 1000*ticks.tv_sec + ticks.tv_nsec/1000000;
 
-        m_ntpSocket->readDatagram(reinterpret_cast<char *>(&response), sizeof(NtpMessage));
+        QHostAddress host;
+        quint16 port;
+
+        m_ntpSocket->readDatagram(reinterpret_cast<char *>(&response), sizeof(NtpMessage), &host, &port);
+
+        qCDebug(lcGeoclueHybris) << "Got NTP response from" << host << port;
 
         qint64 responseTime = m_ntpRequestTime + (ntpResponseTicks - m_ntpRequestTicks);
         qint64 transmitTime = response.transmitTimestamp.toMSecsSinceEpoc();
@@ -833,6 +864,8 @@ void HybrisProvider::handleNtpResponse()
         qint64 reference = ntpResponseTicks;
         int certainty = (ntpResponseTicks - m_ntpRequestTicks - (transmitTime - receiveTime)) / 2;
 
+        qCDebug(lcGeoclueHybris) << "Injecting time" << time << reference << certainty;
+
         m_gps->inject_time(time, reference, certainty);
 
         m_ntpRetryTimer.stop();
@@ -843,6 +876,8 @@ void HybrisProvider::xtraDownloadRequest()
 {
     if (m_xtraDownloadReply)
         return;
+
+    qCDebug(lcGeoclueHybris) << "xtra download requested";
 
     QFile gpsConf(QStringLiteral("/system/etc/gps.conf"));
     if (!gpsConf.open(QIODevice::ReadOnly))
@@ -870,6 +905,8 @@ void HybrisProvider::xtraDownloadRequestSendNext()
     if (m_xtraServers.isEmpty())
         return;
 
+    qCDebug(lcGeoclueHybris) << m_xtraServers;
+
     m_xtraDownloadReply = m_manager->get(QNetworkRequest(m_xtraServers.dequeue()));
     connect(m_xtraDownloadReply, SIGNAL(finished()), this, SLOT(xtraDownloadFinished()));
     connect(m_xtraDownloadReply, SIGNAL(error(QNetworkReply::NetworkError)),
@@ -878,7 +915,7 @@ void HybrisProvider::xtraDownloadRequestSendNext()
 
 void HybrisProvider::xtraDownloadFailed(QNetworkReply::NetworkError error)
 {
-    Q_UNUSED(error)
+    qCDebug(lcGeoclueHybris) << error << m_xtraDownloadReply->errorString();
 
     m_xtraDownloadReply->deleteLater();
     m_xtraDownloadReply = 0;
@@ -891,6 +928,8 @@ void HybrisProvider::xtraDownloadFinished()
 {
     if (!m_xtraDownloadReply)
         return;
+
+    qCDebug(lcGeoclueHybris);
 
     QByteArray xtraData = m_xtraDownloadReply->readAll();
     m_xtra->inject_xtra_data(xtraData.data(), xtraData.length());
@@ -911,6 +950,8 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
     Q_UNUSED(ipv6)
     Q_UNUSED(ssid)
     Q_UNUSED(password)
+
+    qCDebug(lcGeoclueHybris) << "type:" << type << "status:" << status;
 
     if (!m_hereEnabled) {
 #if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
@@ -952,6 +993,7 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
 
 void HybrisProvider::dataServiceConnected()
 {
+    qCDebug(lcGeoclueHybris);
     NetworkService *service = 0;
     foreach (NetworkService *s, m_networkManager->getServices(QStringLiteral("cellular"))) {
         if (s->connected()) {
@@ -965,6 +1007,7 @@ void HybrisProvider::dataServiceConnected()
         return;
     }
 
+    qCDebug(lcGeoclueHybris) << "Connected to" << service->name();
     const QString interface = service->ethernet().value(QStringLiteral("Interface")).toString();
     if (interface.isEmpty()) {
         qWarning("Network service does not have a network interface associated with it.");
@@ -978,6 +1021,7 @@ void HybrisProvider::dataServiceConnected()
         connectionContext.setContextPath(context);
         if (connectionContext.settings().value(QStringLiteral("Interface")) == interface) {
             const QByteArray apn = connectionContext.accessPointName().toLocal8Bit();
+            qCDebug(lcGeoclueHybris) << "Found context APN" << apn;
             m_networkServicePath = service->path();
 #if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
             m_agps->data_conn_open(apn.constData());
@@ -991,7 +1035,7 @@ void HybrisProvider::dataServiceConnected()
 
 void HybrisProvider::connectionErrorReported(const QString &path, const QString &error)
 {
-    Q_UNUSED(error)
+    qCDebug(lcGeoclueHybris) << path << error;
 
     if (path.contains(QStringLiteral("cellular")))
 #if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
@@ -1003,17 +1047,22 @@ void HybrisProvider::connectionErrorReported(const QString &path, const QString 
 
 void HybrisProvider::connectionSelected(bool selected)
 {
-    if (!selected)
+    if (!selected) {
+        qCDebug(lcGeoclueHybris) << "User aborted mobile data connection";
+
 #if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
         m_agps->data_conn_failed();
 #else
         m_agps->data_conn_failed(AGPS_TYPE_SUPL);
 #endif
+    }
 }
 
 void HybrisProvider::setMagneticVariation(double variation)
 {
     if (m_magneticVariation != variation) {
+        qCDebug(lcGeoclueHybris) << "Updating magnetic variation to" << variation;
+
         QDBusMessage msg = QDBusMessage::createMethodCall(QStringLiteral("com.nokia.SensorService"),
                                                           QStringLiteral("/SensorManager"),
                                                           QStringLiteral("local.SensorManager"),
@@ -1026,6 +1075,8 @@ void HybrisProvider::setMagneticVariation(double variation)
 
 void HybrisProvider::engineOn()
 {
+    qCDebug(lcGeoclueHybris);
+
     // The GPS is being turned back on because a position update is required soon.
 
     // I would like to set the status to StatusAcquiring here, but that would cause Geoclue Master
@@ -1038,6 +1089,8 @@ void HybrisProvider::engineOn()
 
 void HybrisProvider::engineOff()
 {
+    qCDebug(lcGeoclueHybris);
+
     // The GPS is being turned off because a position update is not required for a while.
 
     // I would like to set the status to StatusUnavailable here, but that would cause Geoclue
@@ -1056,8 +1109,12 @@ void HybrisProvider::technologiesChanged()
     m_cellularTechnology = m_networkManager->getTechnology(QStringLiteral("cellular"));
 
     if (m_cellularTechnology) {
+        qCDebug(lcGeoclueHybris) << "Cellular technology available and"
+                                 << (m_cellularTechnology->connected() ? "connected" : "not connected");
         connect(m_cellularTechnology, SIGNAL(connectedChanged(bool)),
                 this, SLOT(cellularConnected(bool)));
+    } else {
+        qCDebug(lcGeoclueHybris) << "Cellular technology not available";
     }
 }
 
@@ -1073,6 +1130,7 @@ void HybrisProvider::ofonoModemsChanged()
 
 void HybrisProvider::cellularConnected(bool connected)
 {
+    qCDebug(lcGeoclueHybris) << connected;
     if (connected)
         dataServiceConnected();
 }
@@ -1152,6 +1210,8 @@ void HybrisProvider::startPositioningIfNeeded()
         return;
     }
 
+    qCDebug(lcGeoclueHybris) << "Starting positioning";
+
     error = m_gps->start();
     if (error) {
         qWarning("Failed to start positioning, error %d\n", error);
@@ -1183,6 +1243,7 @@ void HybrisProvider::stopPositioningIfNeeded()
     }
 
     if (m_gps) {
+        qCDebug(lcGeoclueHybris) << "Stopping positioning";
         int error = m_gps->stop();
         if (error)
             qWarning("Failed to stop positioning, error %d\n", error);
@@ -1258,6 +1319,9 @@ void HybrisProvider::startDataConnection()
     // Check if existing cellular network service is connected
     NetworkTechnology *technology = m_networkManager->getTechnology(QStringLiteral("cellular"));
     if (technology && technology->connected()) {
+        qCDebug(lcGeoclueHybris) << technology << technology->type()
+                                 << (technology->connected() ? "connected" : "not connected")
+                                 << (technology->powered() ? "powered" : "not powered");
         dataServiceConnected();
         return;
     }
@@ -1274,6 +1338,8 @@ void HybrisProvider::startDataConnection()
 
 void HybrisProvider::stopDataConnection()
 {
+    qCDebug(lcGeoclueHybris);
+
     if (!m_requestedConnect)
         return;
 
@@ -1293,6 +1359,8 @@ void HybrisProvider::stopDataConnection()
 
 void HybrisProvider::sendNtpRequest()
 {
+    qCDebug(lcGeoclueHybris) << m_ntpServers;
+
     if (m_ntpServers.isEmpty())
         return;
 
