@@ -909,19 +909,6 @@ void HybrisProvider::xtraDownloadRequestSendNext()
 
     m_xtraDownloadReply = m_manager->get(QNetworkRequest(m_xtraServers.dequeue()));
     connect(m_xtraDownloadReply, SIGNAL(finished()), this, SLOT(xtraDownloadFinished()));
-    connect(m_xtraDownloadReply, SIGNAL(error(QNetworkReply::NetworkError)),
-            this, SLOT(xtraDownloadFailed(QNetworkReply::NetworkError)));
-}
-
-void HybrisProvider::xtraDownloadFailed(QNetworkReply::NetworkError error)
-{
-    qCDebug(lcGeoclueHybris) << error << m_xtraDownloadReply->errorString();
-
-    m_xtraDownloadReply->deleteLater();
-    m_xtraDownloadReply = 0;
-
-    // Try next server
-    xtraDownloadRequestSendNext();
 }
 
 void HybrisProvider::xtraDownloadFinished()
@@ -931,13 +918,24 @@ void HybrisProvider::xtraDownloadFinished()
 
     qCDebug(lcGeoclueHybris);
 
-    QByteArray xtraData = m_xtraDownloadReply->readAll();
-    m_xtra->inject_xtra_data(xtraData.data(), xtraData.length());
-
     m_xtraDownloadReply->deleteLater();
-    m_xtraDownloadReply = 0;
 
-    m_xtraServers.clear();
+    if (m_xtraDownloadReply->error() != QNetworkReply::NoError) {
+        qCDebug(lcGeoclueHybris) << "Error:" << m_xtraDownloadReply->error()
+                                 << m_xtraDownloadReply->errorString();
+
+        m_xtraDownloadReply = 0;
+
+        // Try next server
+        xtraDownloadRequestSendNext();
+    } else {
+        QByteArray xtraData = m_xtraDownloadReply->readAll();
+        m_xtra->inject_xtra_data(xtraData.data(), xtraData.length());
+
+        m_xtraDownloadReply = 0;
+
+        m_xtraServers.clear();
+    }
 }
 
 void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress &ipv4,

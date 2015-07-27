@@ -120,7 +120,6 @@ private slots:
     void handleNtpResponse();
     void xtraDownloadRequest();
     void xtraDownloadRequestSendNext();
-    void xtraDownloadFailed(QNetworkReply::NetworkError error);
     void xtraDownloadFinished();
     void agpsStatus(qint16 type, quint16 status, const QHostAddress &ipv4,
                     const QHostAddress &ipv6, const QByteArray &ssid, const QByteArray &password);
