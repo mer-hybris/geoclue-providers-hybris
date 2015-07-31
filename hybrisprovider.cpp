@@ -380,7 +380,8 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_requestedConnect(false), m_gpsStarted(false), m_deviceControl(0),
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(0),
     m_ofonoManager(new QOfonoManager(this)),
-    m_connectionManager(new QOfonoConnectionManager(this)), m_ntpSocket(0), m_hereEnabled(false)
+    m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(0), m_ntpSocket(0),
+    m_hereEnabled(false)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -410,6 +411,8 @@ HybrisProvider::HybrisProvider(QObject *parent)
     technologiesChanged();
 
     connect(m_ofonoManager, SIGNAL(modemsChanged(QStringList)), this, SLOT(ofonoModemsChanged()));
+    connect(m_connectionManager, SIGNAL(validChanged(bool)),
+            this, SLOT(connectionManagerValidChanged()));
 
     ofonoModemsChanged();
 
@@ -992,43 +995,22 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
 void HybrisProvider::dataServiceConnected()
 {
     qCDebug(lcGeoclueHybris);
-    NetworkService *service = 0;
-    foreach (NetworkService *s, m_networkManager->getServices(QStringLiteral("cellular"))) {
-        if (s->connected()) {
-            service = s;
-            break;
-        }
-    }
+    foreach (NetworkService *service, m_networkManager->getServices(QStringLiteral("cellular"))) {
+        if (!service->connected())
+            continue;
 
-    if (!service) {
-        qWarning("No connected cellular network service found.");
-        return;
-    }
-
-    qCDebug(lcGeoclueHybris) << "Connected to" << service->name();
-    const QString interface = service->ethernet().value(QStringLiteral("Interface")).toString();
-    if (interface.isEmpty()) {
-        qWarning("Network service does not have a network interface associated with it.");
-        return;
-    }
-
-    QStringList contexts = m_connectionManager->contexts();
-    QOfonoConnectionContext connectionContext;
-    foreach (const QString &context, contexts) {
-        // Find the APN of the connection context associated with the network session.
-        connectionContext.setContextPath(context);
-        if (connectionContext.settings().value(QStringLiteral("Interface")) == interface) {
-            const QByteArray apn = connectionContext.accessPointName().toLocal8Bit();
-            qCDebug(lcGeoclueHybris) << "Found context APN" << apn;
+        qCDebug(lcGeoclueHybris) << "Connected to" << service->name();
+        m_agpsInterface = service->ethernet().value(QStringLiteral("Interface")).toString();
+        if (!m_agpsInterface.isEmpty()) {
             m_networkServicePath = service->path();
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
-            m_agps->data_conn_open(apn.constData());
-#else
-            m_agps->data_conn_open(AGPS_TYPE_SUPL, apn.constData(), AGPS_APN_BEARER_IPV4);
-#endif
-            break;
+            processConnectionContexts();
+            return;
         }
+
+        qWarning("Network service does not have a network interface associated with it.");
     }
+
+    qWarning("No connected cellular network service found.");
 }
 
 void HybrisProvider::connectionErrorReported(const QString &path, const QString &error)
@@ -1119,11 +1101,46 @@ void HybrisProvider::technologiesChanged()
 void HybrisProvider::ofonoModemsChanged()
 {
     const QStringList modems = m_ofonoManager->modems();
-    QString modem;
-    if (!modems.isEmpty())
-        modem = modems.first();
+    qCDebug(lcGeoclueHybris) << "Available cellular modems" << modems;
 
-    m_connectionManager->setModemPath(modem);
+    if (modems.isEmpty())
+        return;
+
+    if (modems.length() > 1)
+        qWarning("Multiple cellular modems available, using first.");
+
+    m_connectionManager->setModemPath(modems.first());
+}
+
+void HybrisProvider::connectionManagerValidChanged()
+{
+    qCDebug(lcGeoclueHybris);
+
+    if (!m_agpsInterface.isEmpty())
+        processConnectionContexts();
+}
+
+void HybrisProvider::connectionContextValidChanged()
+{
+    qCDebug(lcGeoclueHybris);
+
+    if (m_connectionContext->isValid() &&
+        m_connectionContext->settings().value(QStringLiteral("Interface")) == m_agpsInterface) {
+        const QByteArray apn = m_connectionContext->accessPointName().toLocal8Bit();
+        qCDebug(lcGeoclueHybris) << "Found connection context APN" << apn;
+
+        m_agpsInterface.clear();
+        m_connectionContext->deleteLater();
+        m_connectionContext = 0;
+
+#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+        m_agps->data_conn_open(apn.constData());
+#else
+        m_agps->data_conn_open(AGPS_TYPE_SUPL, apn.constData(), AGPS_APN_BEARER_IPV4);
+#endif
+    } else {
+        processNextConnectionContext();
+    }
 }
 
 void HybrisProvider::cellularConnected(bool connected)
@@ -1314,6 +1331,8 @@ quint32 HybrisProvider::minimumRequestedUpdateInterval() const
 
 void HybrisProvider::startDataConnection()
 {
+    qCDebug(lcGeoclueHybris);
+
     // Check if existing cellular network service is connected
     NetworkTechnology *technology = m_networkManager->getTechnology(QStringLiteral("cellular"));
     if (technology && technology->connected()) {
@@ -1367,4 +1386,44 @@ void HybrisProvider::sendNtpRequest()
 
     if (m_ntpServers.isEmpty())
         m_ntpRetryTimer.stop();
+}
+
+void HybrisProvider::processConnectionContexts()
+{
+    if (!m_connectionManager->isValid()) {
+        qCDebug(lcGeoclueHybris) << "Connection manager is not yet valid.";
+        return;
+    }
+
+    m_connectionContexts = m_connectionManager->contexts();
+    processNextConnectionContext();
+}
+
+void HybrisProvider::processNextConnectionContext()
+{
+    qCDebug(lcGeoclueHybris) << "Remaining connection contexts to check:" << m_connectionContexts;
+
+    if (m_connectionContexts.isEmpty()) {
+        qWarning("Could not determine APN for active cellular connection.");
+
+        m_agpsInterface.clear();
+        delete m_connectionContext;
+        m_connectionContext = 0;
+
+#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+        m_agps->data_conn_failed();
+#else
+        m_agps->data_conn_failed(AGPS_TYPE_SUPL);
+#endif
+    }
+
+    if (!m_connectionContext) {
+        m_connectionContext = new QOfonoConnectionContext(this);
+        connect(m_connectionContext, SIGNAL(validChanged(bool)),
+                this, SLOT(connectionContextValidChanged()));
+    }
+
+    const QString contextPath = m_connectionContexts.takeFirst();
+    qCDebug(lcGeoclueHybris) << "Getting APN for" << contextPath;
+    m_connectionContext->setContextPath(contextPath);
 }
