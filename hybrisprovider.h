@@ -32,6 +32,7 @@ class NetworkManager;
 class NetworkTechnology;
 class QOfonoManager;
 class QOfonoConnectionManager;
+class QOfonoConnectionContext;
 
 class HybrisProvider : public QObject, public QDBusContext
 {
@@ -134,6 +135,8 @@ private slots:
 
     void technologiesChanged();
     void ofonoModemsChanged();
+    void connectionManagerValidChanged();
+    void connectionContextValidChanged();
     void cellularConnected(bool connected);
 
 private:
@@ -149,6 +152,9 @@ private:
     void stopDataConnection();
 
     void sendNtpRequest();
+
+    void processConnectionContexts();
+    void processNextConnectionContext();
 
     gps_device_t *m_gpsDevice;
 
@@ -200,6 +206,8 @@ private:
     ComJollaLipstickConnectionSelectorIfInterface *m_connectionSelector;
 
     QString m_networkServicePath;
+    QString m_agpsInterface;
+    QStringList m_connectionContexts;
     bool m_requestedConnect;
 
     bool m_gpsStarted;
@@ -211,6 +219,7 @@ private:
 
     QOfonoManager *m_ofonoManager;
     QOfonoConnectionManager *m_connectionManager;
+    QOfonoConnectionContext *m_connectionContext;
 
     QUdpSocket *m_ntpSocket;
     QBasicTimer m_ntpRetryTimer;
