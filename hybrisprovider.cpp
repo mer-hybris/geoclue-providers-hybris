@@ -1415,6 +1415,8 @@ void HybrisProvider::processNextConnectionContext()
 #else
         m_agps->data_conn_failed(AGPS_TYPE_SUPL);
 #endif
+
+        return;
     }
 
     if (!m_connectionContext) {
