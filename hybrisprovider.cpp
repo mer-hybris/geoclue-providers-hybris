@@ -42,6 +42,13 @@ Q_LOGGING_CATEGORY(lcGeoclueHybris, "geoclue.provider.hybris")
 Q_LOGGING_CATEGORY(lcGeoclueHybrisNmea, "geoclue.provider.hybris.nmea")
 Q_LOGGING_CATEGORY(lcGeoclueHybrisPosition, "geoclue.provider.hybris.position")
 
+// Versions of the Android AGPS interface supported
+#if ANDROID_VERSION_MAJOR == 5 && ANDROID_VERSION_MINOR >= 1
+    #define AGPS_INTERFACE_V2
+#elif ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+    #define AGPS_INTERFACE_V1
+#endif
+
 namespace
 {
 
@@ -219,19 +226,26 @@ void requestUtcTimeCallback()
 
 void agpsStatusCallback(AGpsStatus *status)
 {
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
-    QHostAddress ipv4(status->ipaddr);
-    // These are currently defined as Q_UNUSED in agpsStatus thus, defining these
-    // as empty should be ok.
-    // TODO: if these get some use later this needs to be rechecked.
-    QByteArray ssid("");
-    QByteArray password("");
-#else
-    QHostAddress ipv4(status->ipv4_addr);
-    QByteArray ssid(status->ssid, SSID_BUF_SIZE);
-    QByteArray password(status->password, SSID_BUF_SIZE);
-#endif
+    QHostAddress ipv4;
     QHostAddress ipv6;
+    QByteArray ssid;
+    QByteArray password;
+
+#if defined(AGPS_INTERFACE_V2)
+    if (status->addr.ss_family == AF_INET) {
+        ipv4.setAddress(status->ipaddr);
+    } else if (status->addr.ss_family == AF_INET6) {
+        qDebug() << "IPv6 address extraction is untested";
+        ipv6.setAddress(reinterpret_cast<sockaddr *>(&status->addr));
+        qDebug() << "IPv6 address:" << ipv6;
+    }
+#elif defined(AGPS_INTERFACE_V1)
+    ipv4.setAddress(status->ipaddr);
+#else
+    ipv4.setAddress(status->ipv4_addr);
+    ssid = QByteArray(status->ssid, SSID_BUF_SIZE);
+    password = QByteArray(status->password, SSID_BUF_SIZE);
+#endif
 
     QMetaObject::invokeMethod(staticProvider, "agpsStatus", Q_ARG(qint16, status->type),
                               Q_ARG(quint16, status->status), Q_ARG(QHostAddress, ipv4),
@@ -261,6 +275,33 @@ void gpsXtraDownloadRequest()
 {
     QMetaObject::invokeMethod(staticProvider, "xtraDownloadRequest");
 }
+
+#if defined(AGPS_INTERFACE_V2)
+ApnIpType fromContextProtocol(const QString &protocol)
+{
+    if (protocol == QLatin1String("ip"))
+        return APN_IP_IPV4;
+    else if (protocol == QLatin1String("ipv6"))
+        return APN_IP_IPV6;
+    else if (protocol == QLatin1String("dual"))
+        return APN_IP_IPV4V6;
+    else
+        return APN_IP_INVALID;
+}
+#elif defined(AGPS_INTERFACE_V1)
+#else
+AGpsBearerType fromContextProtocol(const QString &protocol)
+{
+    if (protocol == QLatin1String("ip"))
+        return AGPS_APN_BEARER_IPV4;
+    else if (protocol == QLatin1String("ipv6"))
+        return AGPS_APN_BEARER_IPV6;
+    else if (protocol == QLatin1String("dual"))
+        return AGPS_APN_BEARER_IPV4V6;
+    else
+        return AGPS_APN_BEARER_INVALID;
+}
+#endif
 
 }
 
@@ -955,7 +996,7 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
     qCDebug(lcGeoclueHybris) << "type:" << type << "status:" << status;
 
     if (!m_hereEnabled) {
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+#if defined(AGPS_INTERFACE_V2) || defined(AGPS_INTERFACE_V1)
         m_agps->data_conn_failed();
 #else
         m_agps->data_conn_failed(AGPS_TYPE_SUPL);
@@ -974,7 +1015,7 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
         break;
     case GPS_RELEASE_AGPS_DATA_CONN:
         // Immediately inform that connection is closed.
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+#if defined(AGPS_INTERFACE_V2) || defined(AGPS_INTERFACE_V1)
         m_agps->data_conn_closed();
 #else
         m_agps->data_conn_closed(AGPS_TYPE_SUPL);
@@ -1018,7 +1059,7 @@ void HybrisProvider::connectionErrorReported(const QString &path, const QString 
     qCDebug(lcGeoclueHybris) << path << error;
 
     if (path.contains(QStringLiteral("cellular")))
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+#if defined(AGPS_INTERFACE_V2) || defined(AGPS_INTERFACE_V1)
         m_agps->data_conn_failed();
 #else
         m_agps->data_conn_failed(AGPS_TYPE_SUPL);
@@ -1030,7 +1071,7 @@ void HybrisProvider::connectionSelected(bool selected)
     if (!selected) {
         qCDebug(lcGeoclueHybris) << "User aborted mobile data connection";
 
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+#if defined(AGPS_INTERFACE_V2) || defined(AGPS_INTERFACE_V1)
         m_agps->data_conn_failed();
 #else
         m_agps->data_conn_failed(AGPS_TYPE_SUPL);
@@ -1127,16 +1168,20 @@ void HybrisProvider::connectionContextValidChanged()
     if (m_connectionContext->isValid() &&
         m_connectionContext->settings().value(QStringLiteral("Interface")) == m_agpsInterface) {
         const QByteArray apn = m_connectionContext->accessPointName().toLocal8Bit();
+        const QString protocol = m_connectionContext->protocol();
+
         qCDebug(lcGeoclueHybris) << "Found connection context APN" << apn;
 
         m_agpsInterface.clear();
         m_connectionContext->deleteLater();
         m_connectionContext = 0;
 
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+#if defined(AGPS_INTERFACE_V2)
+        m_agps->data_conn_open_with_apn_ip_type(apn.constData(), fromContextProtocol(protocol));
+#elif defined(AGPS_INTERFACE_V1)
         m_agps->data_conn_open(apn.constData());
 #else
-        m_agps->data_conn_open(AGPS_TYPE_SUPL, apn.constData(), AGPS_APN_BEARER_IPV4);
+        m_agps->data_conn_open(AGPS_TYPE_SUPL, apn.constData(), fromContextProtocol(protocol));
 #endif
     } else {
         processNextConnectionContext();
@@ -1410,7 +1455,7 @@ void HybrisProvider::processNextConnectionContext()
         delete m_connectionContext;
         m_connectionContext = 0;
 
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+#if defined(AGPS_INTERFACE_V2) || defined(AGPS_INTERFACE_V1)
         m_agps->data_conn_failed();
 #else
         m_agps->data_conn_failed(AGPS_TYPE_SUPL);
