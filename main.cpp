@@ -39,6 +39,16 @@ int main(int argc, char *argv[])
 
     supplementaryGroups[numberGroups++] = group->gr_gid;
 
+#if GEOCLUE_ANDROID_GPS_INTERFACE == 2
+    group = getgrnam("net_raw");
+    if (group) {
+        if (numberGroups + 1 > NGROUPS_MAX)
+            qWarning("Too many supplementary groups, can't add net_raw");
+        else
+            supplementaryGroups[numberGroups++] = group->gr_gid;
+    }
+#endif
+
     numberGroups = setgroups(numberGroups, supplementaryGroups);
     if (numberGroups == -1)
         qFatal("Failed to set supplementary groups, %s", strerror(errno));
