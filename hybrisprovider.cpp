@@ -20,6 +20,8 @@
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QUdpSocket>
 #include <QtNetwork/QHostInfo>
+#include <QtDBus/QDBusConnection>
+#include <QtDBus/QDBusMessage>
 
 #include <networkmanager.h>
 #include <networkservice.h>
@@ -30,9 +32,6 @@
 
 #include <strings.h>
 #include <sys/time.h>
-
-#include <QDBusMessage>
-#include <QDBusConnection>
 
 Q_DECLARE_METATYPE(QHostAddress)
 
