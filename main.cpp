@@ -58,10 +58,12 @@ int main(int argc, char *argv[])
     if (!system.registerService(QStringLiteral("com.jollamobile.gps")))
         qFatal("Failed to register service com.jollamobile.gps");
 
+#if GEOCLUE_ANDROID_GPS_INTERFACE != 2
     // Drop privileges.
     result = setuid(realUid);
     if (result == -1)
         qFatal("Failed to set process uid to %d, %s", realUid, strerror(errno));
+#endif
 
     QLoggingCategory::setFilterRules(QStringLiteral("geoclue.provider.hybris.debug=false\n"
                                                     "geoclue.provider.hybris.nmea.debug=false\n"
