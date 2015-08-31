@@ -80,17 +80,18 @@ void locationCallback(GpsLocation *location)
         loc.setAccuracy(accuracy);
     }
 
-    QMetaObject::invokeMethod(staticProvider, "setLocation", Q_ARG(Location, loc));
+    QMetaObject::invokeMethod(staticProvider, "setLocation", Qt::QueuedConnection,
+                              Q_ARG(Location, loc));
 }
 
 void statusCallback(GpsStatus *status)
 {
     switch (status->status) {
     case GPS_STATUS_ENGINE_ON:
-        QMetaObject::invokeMethod(staticProvider, "engineOn");
+        QMetaObject::invokeMethod(staticProvider, "engineOn", Qt::QueuedConnection);
         break;
     case GPS_STATUS_ENGINE_OFF:
-        QMetaObject::invokeMethod(staticProvider, "engineOff");
+        QMetaObject::invokeMethod(staticProvider, "engineOff", Qt::QueuedConnection);
         break;
     default:
         ;
@@ -115,7 +116,7 @@ void svStatusCallback(GpsSvStatus *svStatus)
             usedPrns.append(svInfo.prn);
     }
 
-    QMetaObject::invokeMethod(staticProvider, "setSatellite",
+    QMetaObject::invokeMethod(staticProvider, "setSatellite", Qt::QueuedConnection,
                               Q_ARG(QList<SatelliteInfo>, satellites),
                               Q_ARG(QList<int>, usedPrns));
 }
@@ -151,7 +152,8 @@ void parseRmc(const QByteArray &nmea)
         if (fields.at(11) == "W")
             variation = -variation;
 
-        QMetaObject::invokeMethod(staticProvider, "setMagneticVariation", Q_ARG(double, variation));
+        QMetaObject::invokeMethod(staticProvider, "setMagneticVariation", Qt::QueuedConnection,
+                                  Q_ARG(double, variation));
     }
 }
 
@@ -211,7 +213,7 @@ void requestUtcTimeCallback()
 {
     qCDebug(lcGeoclueHybris);
 
-    QMetaObject::invokeMethod(staticProvider, "injectUtcTime");
+    QMetaObject::invokeMethod(staticProvider, "injectUtcTime", Qt::QueuedConnection);
 }
 
 void agpsStatusCallback(AGpsStatus *status)
@@ -237,10 +239,10 @@ void agpsStatusCallback(AGpsStatus *status)
     password = QByteArray(status->password, SSID_BUF_SIZE);
 #endif
 
-    QMetaObject::invokeMethod(staticProvider, "agpsStatus", Q_ARG(qint16, status->type),
-                              Q_ARG(quint16, status->status), Q_ARG(QHostAddress, ipv4),
-                              Q_ARG(QHostAddress, ipv6), Q_ARG(QByteArray, ssid),
-                              Q_ARG(QByteArray, password));
+    QMetaObject::invokeMethod(staticProvider, "agpsStatus", Qt::QueuedConnection,
+                              Q_ARG(qint16, status->type), Q_ARG(quint16, status->status),
+                              Q_ARG(QHostAddress, ipv4), Q_ARG(QHostAddress, ipv6),
+                              Q_ARG(QByteArray, ssid), Q_ARG(QByteArray, password));
 }
 
 void gpsNiNotifyCallback(GpsNiNotification *notification)
@@ -263,7 +265,7 @@ void agpsRilRequestRefLoc(uint32_t flags)
 
 void gpsXtraDownloadRequest()
 {
-    QMetaObject::invokeMethod(staticProvider, "xtraDownloadRequest");
+    QMetaObject::invokeMethod(staticProvider, "xtraDownloadRequest", Qt::QueuedConnection);
 }
 
 #if GEOCLUE_ANDROID_GPS_INTERFACE == 2
