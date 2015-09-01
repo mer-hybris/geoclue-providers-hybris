@@ -198,15 +198,10 @@ pthread_t createThreadCallback(const char *name, void (*start)(void *), void *ar
     Q_UNUSED(name)
 
     pthread_t threadId;
-    pthread_attr_t attr;
 
-    int error = pthread_attr_init(&attr);
-    error = pthread_create(&threadId, &attr, (void*(*)(void*))start, arg);
+    int error = pthread_create(&threadId, 0, (void*(*)(void*))start, arg);
 
-    if (error)
-      return 0;
-
-    return threadId;
+    return error ? 0 : threadId;
 }
 
 void requestUtcTimeCallback()
