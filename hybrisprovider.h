@@ -13,9 +13,19 @@
 #include <QtDBus/QDBusContext>
 #include <QtNetwork/QNetworkReply>
 
+#include <android-version.h>
 #include <hardware/gps.h>
 
 #include "locationtypes.h"
+
+// Define versions of the Android GPS interface supported.
+#if ANDROID_VERSION_MAJOR == 5 && ANDROID_VERSION_MINOR >= 1
+    #define GEOCLUE_ANDROID_GPS_INTERFACE 2
+#elif ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+    #define GEOCLUE_ANDROID_GPS_INTERFACE 1
+#else
+    // By default expects Android 4.1
+#endif
 
 QT_FORWARD_DECLARE_CLASS(QFileSystemWatcher)
 QT_FORWARD_DECLARE_CLASS(QDBusServiceWatcher)

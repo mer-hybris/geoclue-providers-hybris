@@ -39,6 +39,16 @@ int main(int argc, char *argv[])
 
     supplementaryGroups[numberGroups++] = group->gr_gid;
 
+#if GEOCLUE_ANDROID_GPS_INTERFACE == 2
+    group = getgrnam("net_raw");
+    if (group) {
+        if (numberGroups + 1 > NGROUPS_MAX)
+            qWarning("Too many supplementary groups, can't add net_raw");
+        else
+            supplementaryGroups[numberGroups++] = group->gr_gid;
+    }
+#endif
+
     numberGroups = setgroups(numberGroups, supplementaryGroups);
     if (numberGroups == -1)
         qFatal("Failed to set supplementary groups, %s", strerror(errno));
@@ -48,10 +58,12 @@ int main(int argc, char *argv[])
     if (!system.registerService(QStringLiteral("com.jollamobile.gps")))
         qFatal("Failed to register service com.jollamobile.gps");
 
+#if GEOCLUE_ANDROID_GPS_INTERFACE != 2
     // Drop privileges.
     result = setuid(realUid);
     if (result == -1)
         qFatal("Failed to set process uid to %d, %s", realUid, strerror(errno));
+#endif
 
     QLoggingCategory::setFilterRules(QStringLiteral("geoclue.provider.hybris.debug=false\n"
                                                     "geoclue.provider.hybris.nmea.debug=false\n"

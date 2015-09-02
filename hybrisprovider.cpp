@@ -20,6 +20,8 @@
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QUdpSocket>
 #include <QtNetwork/QHostInfo>
+#include <QtDBus/QDBusConnection>
+#include <QtDBus/QDBusMessage>
 
 #include <networkmanager.h>
 #include <networkservice.h>
@@ -30,11 +32,6 @@
 
 #include <strings.h>
 #include <sys/time.h>
-
-#include <android-version.h>
-
-#include <QDBusMessage>
-#include <QDBusConnection>
 
 Q_DECLARE_METATYPE(QHostAddress)
 
@@ -83,17 +80,18 @@ void locationCallback(GpsLocation *location)
         loc.setAccuracy(accuracy);
     }
 
-    QMetaObject::invokeMethod(staticProvider, "setLocation", Q_ARG(Location, loc));
+    QMetaObject::invokeMethod(staticProvider, "setLocation", Qt::QueuedConnection,
+                              Q_ARG(Location, loc));
 }
 
 void statusCallback(GpsStatus *status)
 {
     switch (status->status) {
     case GPS_STATUS_ENGINE_ON:
-        QMetaObject::invokeMethod(staticProvider, "engineOn");
+        QMetaObject::invokeMethod(staticProvider, "engineOn", Qt::QueuedConnection);
         break;
     case GPS_STATUS_ENGINE_OFF:
-        QMetaObject::invokeMethod(staticProvider, "engineOff");
+        QMetaObject::invokeMethod(staticProvider, "engineOff", Qt::QueuedConnection);
         break;
     default:
         ;
@@ -118,7 +116,7 @@ void svStatusCallback(GpsSvStatus *svStatus)
             usedPrns.append(svInfo.prn);
     }
 
-    QMetaObject::invokeMethod(staticProvider, "setSatellite",
+    QMetaObject::invokeMethod(staticProvider, "setSatellite", Qt::QueuedConnection,
                               Q_ARG(QList<SatelliteInfo>, satellites),
                               Q_ARG(QList<int>, usedPrns));
 }
@@ -154,7 +152,8 @@ void parseRmc(const QByteArray &nmea)
         if (fields.at(11) == "W")
             variation = -variation;
 
-        QMetaObject::invokeMethod(staticProvider, "setMagneticVariation", Q_ARG(double, variation));
+        QMetaObject::invokeMethod(staticProvider, "setMagneticVariation", Qt::QueuedConnection,
+                                  Q_ARG(double, variation));
     }
 }
 
@@ -199,44 +198,46 @@ pthread_t createThreadCallback(const char *name, void (*start)(void *), void *ar
     Q_UNUSED(name)
 
     pthread_t threadId;
-    pthread_attr_t attr;
 
-    int error = pthread_attr_init(&attr);
-    error = pthread_create(&threadId, &attr, (void*(*)(void*))start, arg);
+    int error = pthread_create(&threadId, 0, (void*(*)(void*))start, arg);
 
-    if (error)
-      return 0;
-
-    return threadId;
+    return error ? 0 : threadId;
 }
 
 void requestUtcTimeCallback()
 {
     qCDebug(lcGeoclueHybris);
 
-    QMetaObject::invokeMethod(staticProvider, "injectUtcTime");
+    QMetaObject::invokeMethod(staticProvider, "injectUtcTime", Qt::QueuedConnection);
 }
 
 void agpsStatusCallback(AGpsStatus *status)
 {
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
-    QHostAddress ipv4(status->ipaddr);
-    // These are currently defined as Q_UNUSED in agpsStatus thus, defining these
-    // as empty should be ok.
-    // TODO: if these get some use later this needs to be rechecked.
-    QByteArray ssid("");
-    QByteArray password("");
-#else
-    QHostAddress ipv4(status->ipv4_addr);
-    QByteArray ssid(status->ssid, SSID_BUF_SIZE);
-    QByteArray password(status->password, SSID_BUF_SIZE);
-#endif
+    QHostAddress ipv4;
     QHostAddress ipv6;
+    QByteArray ssid;
+    QByteArray password;
 
-    QMetaObject::invokeMethod(staticProvider, "agpsStatus", Q_ARG(qint16, status->type),
-                              Q_ARG(quint16, status->status), Q_ARG(QHostAddress, ipv4),
-                              Q_ARG(QHostAddress, ipv6), Q_ARG(QByteArray, ssid),
-                              Q_ARG(QByteArray, password));
+#if GEOCLUE_ANDROID_GPS_INTERFACE == 2
+    if (status->addr.ss_family == AF_INET) {
+        ipv4.setAddress(status->ipaddr);
+    } else if (status->addr.ss_family == AF_INET6) {
+        qDebug() << "IPv6 address extraction is untested";
+        ipv6.setAddress(reinterpret_cast<sockaddr *>(&status->addr));
+        qDebug() << "IPv6 address:" << ipv6;
+    }
+#elif GEOCLUE_ANDROID_GPS_INTERFACE == 1
+    ipv4.setAddress(status->ipaddr);
+#else
+    ipv4.setAddress(status->ipv4_addr);
+    ssid = QByteArray(status->ssid, SSID_BUF_SIZE);
+    password = QByteArray(status->password, SSID_BUF_SIZE);
+#endif
+
+    QMetaObject::invokeMethod(staticProvider, "agpsStatus", Qt::QueuedConnection,
+                              Q_ARG(qint16, status->type), Q_ARG(quint16, status->status),
+                              Q_ARG(QHostAddress, ipv4), Q_ARG(QHostAddress, ipv6),
+                              Q_ARG(QByteArray, ssid), Q_ARG(QByteArray, password));
 }
 
 void gpsNiNotifyCallback(GpsNiNotification *notification)
@@ -259,8 +260,35 @@ void agpsRilRequestRefLoc(uint32_t flags)
 
 void gpsXtraDownloadRequest()
 {
-    QMetaObject::invokeMethod(staticProvider, "xtraDownloadRequest");
+    QMetaObject::invokeMethod(staticProvider, "xtraDownloadRequest", Qt::QueuedConnection);
 }
+
+#if GEOCLUE_ANDROID_GPS_INTERFACE == 2
+ApnIpType fromContextProtocol(const QString &protocol)
+{
+    if (protocol == QLatin1String("ip"))
+        return APN_IP_IPV4;
+    else if (protocol == QLatin1String("ipv6"))
+        return APN_IP_IPV6;
+    else if (protocol == QLatin1String("dual"))
+        return APN_IP_IPV4V6;
+    else
+        return APN_IP_INVALID;
+}
+#elif GEOCLUE_ANDROID_GPS_INTERFACE == 1
+#else
+AGpsBearerType fromContextProtocol(const QString &protocol)
+{
+    if (protocol == QLatin1String("ip"))
+        return AGPS_APN_BEARER_IPV4;
+    else if (protocol == QLatin1String("ipv6"))
+        return AGPS_APN_BEARER_IPV6;
+    else if (protocol == QLatin1String("dual"))
+        return AGPS_APN_BEARER_IPV4V6;
+    else
+        return AGPS_APN_BEARER_INVALID;
+}
+#endif
 
 }
 
@@ -955,7 +983,7 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
     qCDebug(lcGeoclueHybris) << "type:" << type << "status:" << status;
 
     if (!m_hereEnabled) {
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+#if GEOCLUE_ANDROID_GPS_INTERFACE == 2 || GEOCLUE_ANDROID_GPS_INTERFACE == 1
         m_agps->data_conn_failed();
 #else
         m_agps->data_conn_failed(AGPS_TYPE_SUPL);
@@ -974,7 +1002,7 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
         break;
     case GPS_RELEASE_AGPS_DATA_CONN:
         // Immediately inform that connection is closed.
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+#if GEOCLUE_ANDROID_GPS_INTERFACE == 2 || GEOCLUE_ANDROID_GPS_INTERFACE == 1
         m_agps->data_conn_closed();
 #else
         m_agps->data_conn_closed(AGPS_TYPE_SUPL);
@@ -1018,7 +1046,7 @@ void HybrisProvider::connectionErrorReported(const QString &path, const QString 
     qCDebug(lcGeoclueHybris) << path << error;
 
     if (path.contains(QStringLiteral("cellular")))
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+#if GEOCLUE_ANDROID_GPS_INTERFACE == 2 || GEOCLUE_ANDROID_GPS_INTERFACE == 1
         m_agps->data_conn_failed();
 #else
         m_agps->data_conn_failed(AGPS_TYPE_SUPL);
@@ -1030,7 +1058,7 @@ void HybrisProvider::connectionSelected(bool selected)
     if (!selected) {
         qCDebug(lcGeoclueHybris) << "User aborted mobile data connection";
 
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+#if GEOCLUE_ANDROID_GPS_INTERFACE == 2 || GEOCLUE_ANDROID_GPS_INTERFACE == 1
         m_agps->data_conn_failed();
 #else
         m_agps->data_conn_failed(AGPS_TYPE_SUPL);
@@ -1127,16 +1155,20 @@ void HybrisProvider::connectionContextValidChanged()
     if (m_connectionContext->isValid() &&
         m_connectionContext->settings().value(QStringLiteral("Interface")) == m_agpsInterface) {
         const QByteArray apn = m_connectionContext->accessPointName().toLocal8Bit();
+        const QString protocol = m_connectionContext->protocol();
+
         qCDebug(lcGeoclueHybris) << "Found connection context APN" << apn;
 
         m_agpsInterface.clear();
         m_connectionContext->deleteLater();
         m_connectionContext = 0;
 
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+#if GEOCLUE_ANDROID_GPS_INTERFACE == 2
+        m_agps->data_conn_open_with_apn_ip_type(apn.constData(), fromContextProtocol(protocol));
+#elif GEOCLUE_ANDROID_GPS_INTERFACE == 1
         m_agps->data_conn_open(apn.constData());
 #else
-        m_agps->data_conn_open(AGPS_TYPE_SUPL, apn.constData(), AGPS_APN_BEARER_IPV4);
+        m_agps->data_conn_open(AGPS_TYPE_SUPL, apn.constData(), fromContextProtocol(protocol));
 #endif
     } else {
         processNextConnectionContext();
@@ -1410,7 +1442,7 @@ void HybrisProvider::processNextConnectionContext()
         delete m_connectionContext;
         m_connectionContext = 0;
 
-#if ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
+#if GEOCLUE_ANDROID_GPS_INTERFACE == 2 || GEOCLUE_ANDROID_GPS_INTERFACE == 1
         m_agps->data_conn_failed();
 #else
         m_agps->data_conn_failed(AGPS_TYPE_SUPL);
