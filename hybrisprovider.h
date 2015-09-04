@@ -244,7 +244,7 @@ private:
     qint64 m_ntpRequestTime;
     qint64 m_ntpRequestTicks;
 
-    bool m_hereEnabled;
+    bool m_agpsEnabled;
     double m_magneticVariation;
 };
 

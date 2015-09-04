@@ -416,7 +416,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(0),
     m_ofonoManager(new QOfonoManager(this)),
     m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(0), m_ntpSocket(0),
-    m_hereEnabled(false)
+    m_agpsEnabled(false)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -617,7 +617,7 @@ void HybrisProvider::SetOptions(const QVariantMap &options)
 
         quint32 updateInterval = minimumRequestedUpdateInterval();
 
-        int error = m_gps->set_position_mode(m_hereEnabled ? GPS_POSITION_MODE_MS_BASED
+        int error = m_gps->set_position_mode(m_agpsEnabled ? GPS_POSITION_MODE_MS_BASED
                                                            : GPS_POSITION_MODE_STANDALONE,
                                              GPS_POSITION_RECURRENCE_PERIODIC, updateInterval,
                                              PreferredAccuracy, PreferredInitialFixTime);
@@ -989,7 +989,7 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
 
     qCDebug(lcGeoclueHybris) << "type:" << type << "status:" << status;
 
-    if (!m_hereEnabled) {
+    if (!m_agpsEnabled) {
 #if GEOCLUE_ANDROID_GPS_INTERFACE == 2 || GEOCLUE_ANDROID_GPS_INTERFACE == 1
         m_agps->data_conn_failed();
 #else
@@ -1253,7 +1253,7 @@ void HybrisProvider::startPositioningIfNeeded()
                          this, SLOT(injectPosition(int,int,double,double,double,Accuracy)));
     }
 
-    int error = m_gps->set_position_mode(m_hereEnabled ? GPS_POSITION_MODE_MS_BASED
+    int error = m_gps->set_position_mode(m_agpsEnabled ? GPS_POSITION_MODE_MS_BASED
                                                        : GPS_POSITION_MODE_STANDALONE,
                                          GPS_POSITION_RECURRENCE_PERIODIC,
                                          minimumRequestedUpdateInterval(),
@@ -1329,15 +1329,15 @@ bool HybrisProvider::positioningEnabled()
 
     bool enabled = settings.value(QStringLiteral("enabled"), false).toBool();
 
-    // Setting names are a bit confusing, agreement_accepted is what the HERE daemons check and is
-    // used to toggle use of the HERE services on and off. here_agreement_accepted is that actual
-    // acceptance state of the agreement. Both need to be true. HERE provides the SUPL service and
-    // needs to be enabled for assisted GPS.
-    bool hereEnabled = settings.value(QStringLiteral("agreement_accepted"), false).toBool();
-    bool hereAccepted = hereEnabled;
+    // Setting names are a bit confusing, agreement_accepted is what the WLAN/CellId positioning
+    // daemons check and is used to toggle use of those services. here_agreement_accepted is the
+    // actual acceptance state of the agreement from the user's perspective. Both need to be true
+    // for AGPS (SUPL assistance) to be used.
+    bool agpsEnabled = settings.value(QStringLiteral("agreement_accepted"), false).toBool();
+    bool agpsAgreementAccepted = agpsEnabled;
     if (settings.contains(QStringLiteral("here_agreement_accepted")))
-        hereAccepted = settings.value(QStringLiteral("here_agreement_accepted"), false).toBool();
-    m_hereEnabled = hereAccepted && hereEnabled;
+        agpsAgreementAccepted = settings.value(QStringLiteral("here_agreement_accepted"), false).toBool();
+    m_agpsEnabled = agpsAgreementAccepted && agpsEnabled;
 
     bool powered = m_deviceControl->powered();
 
