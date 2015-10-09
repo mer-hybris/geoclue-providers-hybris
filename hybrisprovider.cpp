@@ -37,6 +37,8 @@
 #include <qofonoconnectionmanager.h>
 #include <qofonoconnectioncontext.h>
 
+#include <qofonoextmodemmanager.h>
+
 #include <strings.h>
 #include <sys/time.h>
 
@@ -414,7 +416,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_status(StatusUnavailable), m_positionInjectionConnected(false), m_xtraDownloadReply(0),
     m_requestedConnect(false), m_gpsStarted(false), m_deviceControl(0),
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(0),
-    m_ofonoManager(new QOfonoManager(this)),
+    m_ofonoExtModemManager(new QOfonoExtModemManager(this)),
     m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(0), m_ntpSocket(0),
     m_agpsEnabled(false)
 {
@@ -445,11 +447,13 @@ HybrisProvider::HybrisProvider(QObject *parent)
 
     technologiesChanged();
 
-    connect(m_ofonoManager, SIGNAL(modemsChanged(QStringList)), this, SLOT(ofonoModemsChanged()));
+    connect(m_ofonoExtModemManager, SIGNAL(defaultDataModemChanged(QString)),
+            this, SLOT(defaultDataModemChanged(QString)));
+
     connect(m_connectionManager, SIGNAL(validChanged(bool)),
             this, SLOT(connectionManagerValidChanged()));
 
-    ofonoModemsChanged();
+    defaultDataModemChanged(m_ofonoExtModemManager->defaultDataModem());
 
     QDBusConnection connection = QDBusConnection::sessionBus();
 
@@ -1133,18 +1137,11 @@ void HybrisProvider::technologiesChanged()
     }
 }
 
-void HybrisProvider::ofonoModemsChanged()
+void HybrisProvider::defaultDataModemChanged(const QString &modem)
 {
-    const QStringList modems = m_ofonoManager->modems();
-    qCDebug(lcGeoclueHybris) << "Available cellular modems" << modems;
+    qCDebug(lcGeoclueHybris) << "Default data modem changed to" << modem;
 
-    if (modems.isEmpty())
-        return;
-
-    if (modems.length() > 1)
-        qWarning("Multiple cellular modems available, using first.");
-
-    m_connectionManager->setModemPath(modems.first());
+    m_connectionManager->setModemPath(modem);
 }
 
 void HybrisProvider::connectionManagerValidChanged()

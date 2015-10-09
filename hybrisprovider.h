@@ -47,7 +47,7 @@ class MGConfItem;
 class DeviceControl;
 class NetworkManager;
 class NetworkTechnology;
-class QOfonoManager;
+class QOfonoExtModemManager;
 class QOfonoConnectionManager;
 class QOfonoConnectionContext;
 
@@ -151,7 +151,7 @@ private slots:
     void engineOff();
 
     void technologiesChanged();
-    void ofonoModemsChanged();
+    void defaultDataModemChanged(const QString &modem);
     void connectionManagerValidChanged();
     void connectionContextValidChanged();
     void cellularConnected(bool connected);
@@ -234,7 +234,7 @@ private:
     NetworkManager *m_networkManager;
     NetworkTechnology *m_cellularTechnology;
 
-    QOfonoManager *m_ofonoManager;
+    QOfonoExtModemManager *m_ofonoExtModemManager;
     QOfonoConnectionManager *m_connectionManager;
     QOfonoConnectionContext *m_connectionContext;
 
