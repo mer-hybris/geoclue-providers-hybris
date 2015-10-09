@@ -300,16 +300,16 @@ AGpsBearerType fromContextProtocol(const QString &protocol)
 }
 
 GpsCallbacks gpsCallbacks = {
-  sizeof(GpsCallbacks),
-  locationCallback,
-  statusCallback,
-  svStatusCallback,
-  nmeaCallback,
-  setCapabilitiesCallback,
-  acquireWakelockCallback,
-  releaseWakelockCallback,
-  createThreadCallback,
-  requestUtcTimeCallback
+    sizeof(GpsCallbacks),
+    locationCallback,
+    statusCallback,
+    svStatusCallback,
+    nmeaCallback,
+    setCapabilitiesCallback,
+    acquireWakelockCallback,
+    releaseWakelockCallback,
+    createThreadCallback,
+    requestUtcTimeCallback
 };
 
 AGpsCallbacks agpsCallbacks = {
