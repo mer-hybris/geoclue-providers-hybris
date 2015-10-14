@@ -1171,7 +1171,10 @@ void HybrisProvider::connectionContextValidChanged()
         m_connectionContext = 0;
 
 #if GEOCLUE_ANDROID_GPS_INTERFACE == 2
-        m_agps->data_conn_open_with_apn_ip_type(apn.constData(), fromContextProtocol(protocol));
+        if (m_agps->data_conn_open_with_apn_ip_type)
+            m_agps->data_conn_open_with_apn_ip_type(apn.constData(), fromContextProtocol(protocol));
+        else
+            m_agps->data_conn_open(apn.constData());
 #elif GEOCLUE_ANDROID_GPS_INTERFACE == 1
         m_agps->data_conn_open(apn.constData());
 #else
