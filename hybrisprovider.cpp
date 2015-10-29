@@ -328,9 +328,15 @@ AGpsRilCallbacks agpsRilCallbacks = {
     createThreadCallback
 };
 
-GpsXtraCallbacks gpsXtraCallbacks = {
-    gpsXtraDownloadRequest,
-    createThreadCallback
+// Work-around for compatibility, the public definition of GpsXtraCallbacks has only two members,
+// however, some hardware adaptation definitions contain an extra report_xtra_server_cb member.
+// Add extra pointer length padding and initialise it to nullptr to prevent crashes.
+struct GpsXtraCallbacksWrapper {
+    GpsXtraCallbacks callbacks;
+    void *padding;
+} gpsXtraCallbacks = {
+    { gpsXtraDownloadRequest, createThreadCallback },
+    0
 };
 
 
@@ -520,7 +526,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_xtra = static_cast<const GpsXtraInterface *>(m_gps->get_extension(GPS_XTRA_INTERFACE));
     if (m_xtra) {
         qWarning("Initialising GPS Xtra Interface\n");
-        error = m_xtra->init(&gpsXtraCallbacks);
+        error = m_xtra->init(&gpsXtraCallbacks.callbacks);
         if (error)
             qWarning("GPS Xtra Interface init failed, error %d\n", error);
     }
