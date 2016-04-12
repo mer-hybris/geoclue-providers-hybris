@@ -475,7 +475,9 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_connectionSelector = new ComJollaLipstickConnectionSelectorIfInterface(
         QStringLiteral("com.jolla.lipstick.ConnectionSelector"), QStringLiteral("/"), connection);
 
-    m_idleTimer.start(QuitIdleTime, this);
+    if (m_watchedServices.isEmpty()) {
+        m_idleTimer.start(QuitIdleTime, this);
+    }
 
     const hw_module_t *hwModule;
 
@@ -571,9 +573,14 @@ void HybrisProvider::AddReference()
     if (!calledFromDBus())
         qFatal("AddReference must only be called from DBus");
 
+    bool wasInactive = m_watchedServices.isEmpty();
     const QString service = message().service();
     m_watcher->addWatchedService(service);
     m_watchedServices[service].referenceCount += 1;
+    if (wasInactive) {
+        qCDebug(lcGeoclueHybris) << "new watched service, stopping idle timer.";
+        m_idleTimer.stop();
+    }
 
     startPositioningIfNeeded();
 }
@@ -593,8 +600,10 @@ void HybrisProvider::RemoveReference()
         m_watchedServices.remove(service);
     }
 
-    if (m_watchedServices.isEmpty())
+    if (m_watchedServices.isEmpty()) {
+        qCDebug(lcGeoclueHybris) << "no watched services, starting idle timer.";
         m_idleTimer.start(QuitIdleTime, this);
+    }
 
     stopPositioningIfNeeded();
 }
@@ -701,6 +710,7 @@ void HybrisProvider::timerEvent(QTimerEvent *event)
 {
     if (event->timerId() == m_idleTimer.timerId()) {
         m_idleTimer.stop();
+        qCDebug(lcGeoclueHybris) << "have been idle for too long, quitting";
         qApp->quit();
     } else if (event->timerId() == m_fixLostTimer.timerId()) {
         m_fixLostTimer.stop();
@@ -753,8 +763,10 @@ void HybrisProvider::serviceUnregistered(const QString &service)
     m_watchedServices.remove(service);
     m_watcher->removeWatchedService(service);
 
-    if (m_watchedServices.isEmpty())
+    if (m_watchedServices.isEmpty()) {
+        qCDebug(lcGeoclueHybris) << "no watched services, starting idle timer.";
         m_idleTimer.start(QuitIdleTime, this);
+    }
 
     stopPositioningIfNeeded();
 }
