@@ -61,6 +61,14 @@ const quint32 PreferredInitialFixTime = 0;
 const double KnotsToMps = 0.514444;
 
 const QString LocationSettingsFile = QStringLiteral("/etc/location/location.conf");
+const QString LocationSettingsEnabledKey = QStringLiteral("location/enabled");
+const QString LocationSettingsGpsEnabledKey = QStringLiteral("location/gps/enabled");
+const QString LocationSettingsAgpsEnabledKey = QStringLiteral("location/%1/enabled");
+const QString LocationSettingsAgpsAgreementAcceptedKey = QStringLiteral("location/%1/agreement_accepted");
+const QString LocationSettingsAgpsProvidersKey = QStringLiteral("location/agps_providers");
+// deprecated keys
+const QString LocationSettingsOldAgpsEnabledKey = QStringLiteral("location/agreement_accepted");
+const QString LocationSettingsOldAgpsAgreementAcceptedKey = QStringLiteral("location/here_agreement_accepted");
 
 void locationCallback(GpsLocation *location)
 {
@@ -1343,23 +1351,28 @@ void HybrisProvider::setStatus(HybrisProvider::Status status)
 bool HybrisProvider::positioningEnabled()
 {
     QSettings settings(LocationSettingsFile, QSettings::IniFormat);
-    settings.beginGroup(QStringLiteral("location"));
 
-    bool enabled = settings.value(QStringLiteral("enabled"), false).toBool();
+    // check the keys related to agps enablement.  We can have multiple agps providers.
+    bool agpsAgreementAccepted = false;
+    bool agpsEnabled = false;
+    QString agpsProviders = settings.value(LocationSettingsAgpsProvidersKey, QStringLiteral("here")).toString();
+    Q_FOREACH (const QString &agpsProvider, agpsProviders.split(',', QString::SkipEmptyParts)) {
+        agpsAgreementAccepted = settings.value(LocationSettingsAgpsAgreementAcceptedKey.arg(agpsProvider), false).toBool();
+        agpsEnabled = settings.value(LocationSettingsAgpsEnabledKey.arg(agpsProvider), false).toBool();
+        if (agpsAgreementAccepted && agpsEnabled) {
+            break;
+        }
+    }
+    // check the deprecated keys, also:
+    bool oldAgpsAgreementAccepted = settings.value(LocationSettingsOldAgpsAgreementAcceptedKey, false).toBool();
+    bool oldAgpsEnabled = settings.value(LocationSettingsOldAgpsEnabledKey, false).toBool();
+    m_agpsEnabled = (agpsAgreementAccepted || oldAgpsAgreementAccepted) && (agpsEnabled || oldAgpsEnabled);
 
-    // Setting names are a bit confusing, agreement_accepted is what the WLAN/CellId positioning
-    // daemons check and is used to toggle use of those services. here_agreement_accepted is the
-    // actual acceptance state of the agreement from the user's perspective. Both need to be true
-    // for AGPS (SUPL assistance) to be used.
-    bool agpsEnabled = settings.value(QStringLiteral("agreement_accepted"), false).toBool();
-    bool agpsAgreementAccepted = agpsEnabled;
-    if (settings.contains(QStringLiteral("here_agreement_accepted")))
-        agpsAgreementAccepted = settings.value(QStringLiteral("here_agreement_accepted"), false).toBool();
-    m_agpsEnabled = agpsAgreementAccepted && agpsEnabled;
-
+    // check the keys related to the location and gps enablement, plus gps power state
+    bool locationEnabled = settings.value(LocationSettingsEnabledKey, false).toBool();
+    bool gpsEnabled = settings.value(LocationSettingsGpsEnabledKey, true).toBool(); // defaults to true if no key exists but location is enabled.
     bool powered = m_deviceControl->powered();
-
-    return enabled && powered;
+    return locationEnabled && gpsEnabled && powered;
 }
 
 quint32 HybrisProvider::minimumRequestedUpdateInterval() const
