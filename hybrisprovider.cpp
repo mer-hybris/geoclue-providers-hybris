@@ -64,6 +64,7 @@ const QString LocationSettingsFile = QStringLiteral("/etc/location/location.conf
 const QString LocationSettingsEnabledKey = QStringLiteral("location/enabled");
 const QString LocationSettingsGpsEnabledKey = QStringLiteral("location/gps/enabled");
 const QString LocationSettingsAgpsEnabledKey = QStringLiteral("location/%1/enabled");
+const QString LocationSettingsAgpsOnlineEnabledKey = QStringLiteral("location/%1/online_enabled");
 const QString LocationSettingsAgpsAgreementAcceptedKey = QStringLiteral("location/%1/agreement_accepted");
 const QString LocationSettingsAgpsProvidersKey = QStringLiteral("location/agps_providers");
 // deprecated keys
@@ -432,7 +433,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(0),
     m_ofonoExtModemManager(new QOfonoExtModemManager(this)),
     m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(0), m_ntpSocket(0),
-    m_agpsEnabled(false)
+    m_agpsEnabled(false), m_agpsOnlineEnabled(false)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -942,6 +943,9 @@ void HybrisProvider::handleNtpResponse()
 
 void HybrisProvider::xtraDownloadRequest()
 {
+    if (!m_agpsOnlineEnabled)
+        return;
+
     if (m_xtraDownloadReply)
         return;
 
@@ -1060,6 +1064,10 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
 void HybrisProvider::dataServiceConnected()
 {
     qCDebug(lcGeoclueHybris);
+
+    if (!m_agpsOnlineEnabled)
+        return;
+
     foreach (NetworkService *service, m_networkManager->getServices(QStringLiteral("cellular"))) {
         if (!service->connected())
             continue;
@@ -1174,13 +1182,16 @@ void HybrisProvider::connectionManagerValidChanged()
 {
     qCDebug(lcGeoclueHybris);
 
-    if (!m_agpsInterface.isEmpty())
+    if (m_agpsOnlineEnabled && !m_agpsInterface.isEmpty())
         processConnectionContexts();
 }
 
 void HybrisProvider::connectionContextValidChanged()
 {
     qCDebug(lcGeoclueHybris);
+
+    if (!m_agpsOnlineEnabled)
+        return;
 
     if (m_connectionContext->isValid() &&
         m_connectionContext->settings().value(QStringLiteral("Interface")) == m_agpsInterface) {
@@ -1355,11 +1366,13 @@ bool HybrisProvider::positioningEnabled()
     // check the keys related to agps enablement.  We can have multiple agps providers.
     bool agpsAgreementAccepted = false;
     bool agpsEnabled = false;
+    bool agpsOnlineEnabled = false;
     QString agpsProviders = settings.value(LocationSettingsAgpsProvidersKey, QStringLiteral("here")).toString();
     Q_FOREACH (const QString &agpsProvider, agpsProviders.split(',', QString::SkipEmptyParts)) {
         agpsAgreementAccepted = settings.value(LocationSettingsAgpsAgreementAcceptedKey.arg(agpsProvider), false).toBool();
         agpsEnabled = settings.value(LocationSettingsAgpsEnabledKey.arg(agpsProvider), false).toBool();
-        if (agpsAgreementAccepted && agpsEnabled) {
+        agpsOnlineEnabled = settings.value(LocationSettingsAgpsOnlineEnabledKey.arg(agpsProvider), false).toBool();
+        if (agpsAgreementAccepted && agpsEnabled && agpsOnlineEnabled) {
             break;
         }
     }
@@ -1367,6 +1380,7 @@ bool HybrisProvider::positioningEnabled()
     bool oldAgpsAgreementAccepted = settings.value(LocationSettingsOldAgpsAgreementAcceptedKey, false).toBool();
     bool oldAgpsEnabled = settings.value(LocationSettingsOldAgpsEnabledKey, false).toBool();
     m_agpsEnabled = (agpsAgreementAccepted || oldAgpsAgreementAccepted) && (agpsEnabled || oldAgpsEnabled);
+    m_agpsOnlineEnabled = agpsOnlineEnabled || (oldAgpsAgreementAccepted && oldAgpsEnabled);
 
     // check the keys related to the location and gps enablement, plus gps power state
     bool locationEnabled = settings.value(LocationSettingsEnabledKey, false).toBool();
@@ -1402,6 +1416,16 @@ quint32 HybrisProvider::minimumRequestedUpdateInterval() const
 void HybrisProvider::startDataConnection()
 {
     qCDebug(lcGeoclueHybris);
+
+    if (!m_agpsOnlineEnabled) {
+        qCDebug(lcGeoclueHybris) << "Online aGPS not enabled, not starting data connection.";
+#if GEOCLUE_ANDROID_GPS_INTERFACE == 2 || GEOCLUE_ANDROID_GPS_INTERFACE == 1
+        m_agps->data_conn_failed();
+#else
+        m_agps->data_conn_failed(AGPS_TYPE_SUPL);
+#endif
+        return;
+    }
 
     // Check if existing cellular network service is connected
     NetworkTechnology *technology = m_networkManager->getTechnology(QStringLiteral("cellular"));
@@ -1448,8 +1472,15 @@ void HybrisProvider::sendNtpRequest()
 {
     qCDebug(lcGeoclueHybris) << m_ntpServers;
 
-    if (m_ntpServers.isEmpty())
+    if (!m_agpsOnlineEnabled) {
+        qCDebug(lcGeoclueHybris) << "Online aGPS not enabled, not sending NTP request.";
         return;
+    }
+
+    if (m_ntpServers.isEmpty()) {
+        qCDebug(lcGeoclueHybris) << "No NTP servers known, not sending NTP request.";
+        return;
+    }
 
     QString server = m_ntpServers.takeFirst();
     QHostInfo::lookupHost(server, this, SLOT(sendNtpRequest(QHostInfo)));
