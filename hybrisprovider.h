@@ -245,6 +245,7 @@ private:
     qint64 m_ntpRequestTicks;
 
     bool m_agpsEnabled;
+    bool m_agpsOnlineEnabled;
     double m_magneticVariation;
 };
 
