@@ -28,6 +28,10 @@ int main(int argc, char *argv[])
     uid_t effectiveUid;
     uid_t savedUid;
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 3, 0)
+    QCoreApplication::setSetuidAllowed(true);
+#endif
+
     int result = getresuid(&realUid, &effectiveUid, &savedUid);
     if (result == -1)
         qFatal("Failed to get process uids, %s", strerror(errno));
