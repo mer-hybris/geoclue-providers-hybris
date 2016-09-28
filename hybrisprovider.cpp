@@ -1068,7 +1068,8 @@ void HybrisProvider::dataServiceConnected()
     if (!m_agpsOnlineEnabled)
         return;
 
-    foreach (NetworkService *service, m_networkManager->getServices(QStringLiteral("cellular"))) {
+    QVector<NetworkService*> services = m_networkManager->getServices(QStringLiteral("cellular"));
+    Q_FOREACH (NetworkService *service, services) {
         if (!service->connected())
             continue;
 
