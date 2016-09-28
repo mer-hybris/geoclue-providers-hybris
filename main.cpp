@@ -31,6 +31,10 @@ int main(int argc, char *argv[])
 #if QT_VERSION >= QT_VERSION_CHECK(5, 3, 0)
     QCoreApplication::setSetuidAllowed(true);
 #endif
+    QLoggingCategory::setFilterRules(QStringLiteral("geoclue.provider.hybris.debug=false\n"
+                                                    "geoclue.provider.hybris.nmea.debug=false\n"
+                                                    "geoclue.provider.hybris.position.debug=false"));
+    QCoreApplication a(argc, argv);
 
     int result = getresuid(&realUid, &effectiveUid, &savedUid);
     if (result == -1)
@@ -66,6 +70,9 @@ int main(int argc, char *argv[])
 
     // Register service on DBus system bus prior to dropping privileges.
     QDBusConnection system = QDBusConnection::systemBus();
+    DeviceControl control;
+    if (!system.registerObject(QStringLiteral("/com/jollamobile/gps/Device"), &control))
+        qFatal("Failed to register object /com/jollamobile/gps/Device");
     if (!system.registerService(QStringLiteral("com.jollamobile.gps")))
         qFatal("Failed to register service com.jollamobile.gps");
 
@@ -76,29 +83,12 @@ int main(int argc, char *argv[])
         qFatal("Failed to set process uid to %d, %s", realUid, strerror(errno));
 #endif
 
-    QLoggingCategory::setFilterRules(QStringLiteral("geoclue.provider.hybris.debug=false\n"
-                                                    "geoclue.provider.hybris.nmea.debug=false\n"
-                                                    "geoclue.provider.hybris.position.debug=false"));
-
-    QCoreApplication a(argc, argv);
-
-
-    DeviceControl control;
-
-    if (!system.registerObject(QStringLiteral("/com/jollamobile/gps/Device"), &control))
-        qFatal("Failed to register object /com/jollamobile/gps/Device");
-
-
-    QDBusConnection connection = QDBusConnection::sessionBus();
-
-    if (!connection.registerService(QStringLiteral("org.freedesktop.Geoclue.Providers.Hybris")))
-        qFatal("Failed to register service org.freedesktop.Geoclue.Providers.Hybris");
-
+    QDBusConnection session = QDBusConnection::sessionBus();
     HybrisProvider provider;
-
-    if (!connection.registerObject(QStringLiteral("/org/freedesktop/Geoclue/Providers/Hybris"), &provider))
+    if (!session.registerObject(QStringLiteral("/org/freedesktop/Geoclue/Providers/Hybris"), &provider))
         qFatal("Failed to register object /org/freedesktop/Geoclue/Providers/Hybris");
-
+    if (!session.registerService(QStringLiteral("org.freedesktop.Geoclue.Providers.Hybris")))
+        qFatal("Failed to register service org.freedesktop.Geoclue.Providers.Hybris");
     provider.setDeviceController(&control);
 
     return a.exec();
