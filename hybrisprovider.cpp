@@ -60,6 +60,7 @@ const quint32 PreferredAccuracy = 0;
 const quint32 PreferredInitialFixTime = 0;
 const double KnotsToMps = 0.514444;
 
+const QString LocationSettingsDir = QStringLiteral("/etc/location/");
 const QString LocationSettingsFile = QStringLiteral("/etc/location/location.conf");
 const QString LocationSettingsEnabledKey = QStringLiteral("location/enabled");
 const QString LocationSettingsGpsEnabledKey = QStringLiteral("location/gps/enabled");
@@ -449,6 +450,9 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_locationSettings = new QFileSystemWatcher(this);
     connect(m_locationSettings, SIGNAL(fileChanged(QString)),
             this, SLOT(locationEnabledChanged()));
+    connect(m_locationSettings, SIGNAL(directoryChanged(QString)),
+            this, SLOT(locationEnabledChanged()));
+    m_locationSettings->addPath(LocationSettingsDir);
     m_locationSettings->addPath(LocationSettingsFile);
 
     new GeoclueAdaptor(this);
