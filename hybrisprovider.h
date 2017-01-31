@@ -41,6 +41,7 @@ QT_FORWARD_DECLARE_CLASS(QHostAddress)
 QT_FORWARD_DECLARE_CLASS(QUdpSocket)
 QT_FORWARD_DECLARE_CLASS(QHostInfo)
 
+namespace Sailfish { namespace Mdm { class HardwareAccessPolicy; } }
 class ComJollaConnectiondInterface;
 class ComJollaLipstickConnectionSelectorIfInterface;
 class MGConfItem;
@@ -173,6 +174,7 @@ private:
     void processConnectionContexts();
     void processNextConnectionContext();
 
+    Sailfish::Mdm::HardwareAccessPolicy *m_mdmPolicy;
     gps_device_t *m_gpsDevice;
 
     const GpsInterface *m_gps;
