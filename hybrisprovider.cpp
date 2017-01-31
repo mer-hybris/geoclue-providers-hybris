@@ -64,6 +64,8 @@ const QString LocationSettingsDir = QStringLiteral("/etc/location/");
 const QString LocationSettingsFile = QStringLiteral("/etc/location/location.conf");
 const QString LocationSettingsEnabledKey = QStringLiteral("location/enabled");
 const QString LocationSettingsGpsEnabledKey = QStringLiteral("location/gps/enabled");
+const QString LocationSettingsGpsMdmPolicyActiveKey = QStringLiteral("location/gps/mdm_policy_active"); // whether mdm_policy_enabled state needs to be enforced
+const QString LocationSettingsGpsMdmPolicyEnabledKey = QStringLiteral("location/gps/mdm_policy_enabled"); // if true, enable gps; if false, disable gps
 const QString LocationSettingsAgpsEnabledKey = QStringLiteral("location/%1/enabled");
 const QString LocationSettingsAgpsOnlineEnabledKey = QStringLiteral("location/%1/online_enabled");
 const QString LocationSettingsAgpsAgreementAcceptedKey = QStringLiteral("location/%1/agreement_accepted");
@@ -1391,6 +1393,18 @@ bool HybrisProvider::positioningEnabled()
     bool locationEnabled = settings.value(LocationSettingsEnabledKey, false).toBool();
     bool gpsEnabled = settings.value(LocationSettingsGpsEnabledKey, true).toBool(); // defaults to true if no key exists but location is enabled.
     bool powered = m_deviceControl->powered();
+
+    // check the keys related to MDM policy
+    bool policyActive = settings.value(LocationSettingsGpsMdmPolicyActiveKey, false).toBool();
+    bool policyEnabled =settings.value(LocationSettingsGpsMdmPolicyEnabledKey, false).toBool();
+    if (policyActive) {
+        // regardless of whatever other settings might say,
+        // the gps state should reflect the policy state.
+        qCDebug(lcGeoclueHybris) << "MDM policy is active, enforcing GPS enablement state:" << policyEnabled;
+        return policyEnabled;
+    }
+
+    // If the policy is not active, then enable positioning based on user-selected settings.
     return locationEnabled && gpsEnabled && powered;
 }
 
