@@ -21,6 +21,8 @@
 #include "connectiond_interface.h"
 #include "connectionselector_interface.h"
 
+#include <mdm-hwaccesspolicy.h>
+
 #include <QtCore/QLoggingCategory>
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkReply>
@@ -428,7 +430,7 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, QList<SatelliteIn
 }
 
 HybrisProvider::HybrisProvider(QObject *parent)
-:   QObject(parent), m_gps(0), m_agps(0), m_agpsril(0), m_gpsni(0), m_xtra(0),
+:   QObject(parent), m_mdmPolicy(0), m_gps(0), m_agps(0), m_agpsril(0), m_gpsni(0), m_xtra(0),
     m_status(StatusUnavailable), m_positionInjectionConnected(false), m_xtraDownloadReply(0),
     m_requestedConnect(false), m_gpsStarted(false), m_deviceControl(0),
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(0),
@@ -446,6 +448,10 @@ HybrisProvider::HybrisProvider(QObject *parent)
     qDBusRegisterMetaType<QList<SatelliteInfo> >();
 
     staticProvider = this;
+
+    m_mdmPolicy = new Sailfish::Mdm::HardwareAccessPolicy(this);
+    connect(m_mdmPolicy, SIGNAL(gpsPolicyChanged()),
+            this, SLOT(locationEnabledChanged()));
 
     m_locationSettings = new QFileSystemWatcher(this);
     connect(m_locationSettings, SIGNAL(fileChanged(QString)),
@@ -1391,6 +1397,19 @@ bool HybrisProvider::positioningEnabled()
     bool locationEnabled = settings.value(LocationSettingsEnabledKey, false).toBool();
     bool gpsEnabled = settings.value(LocationSettingsGpsEnabledKey, true).toBool(); // defaults to true if no key exists but location is enabled.
     bool powered = m_deviceControl->powered();
+
+    // check the MDM policy.
+    // regardless of whatever other settings might say,
+    // the gps state should reflect the policy state.
+    if (m_mdmPolicy->gpsPolicy() == Sailfish::Mdm::HardwareAccessPolicy::ForceDisablePolicy) {
+        qCDebug(lcGeoclueHybris) << "MDM policy is active, enforcing GPS disabled";
+        return false;
+    } else if (m_mdmPolicy->gpsPolicy() == Sailfish::Mdm::HardwareAccessPolicy::ForceEnablePolicy) {
+        qCDebug(lcGeoclueHybris) << "MDM policy is active, enforcing GPS enabled";
+        return true;
+    }
+
+    // If the policy is not active, then enable positioning based on user-selected settings.
     return locationEnabled && gpsEnabled && powered;
 }
 

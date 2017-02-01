@@ -8,7 +8,7 @@ target.path = /usr/libexec
 QT = core dbus network
 
 CONFIG += link_pkgconfig
-PKGCONFIG += libhardware android-headers connman-qt5 qofono-qt5 qofonoext
+PKGCONFIG += libhardware android-headers connman-qt5 qofono-qt5 qofonoext sailfishmdm-policy
 
 LIBS += -lrt
 
