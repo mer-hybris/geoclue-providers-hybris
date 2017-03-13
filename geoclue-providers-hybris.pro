@@ -8,13 +8,9 @@ target.path = /usr/libexec
 QT = core dbus network
 
 CONFIG += link_pkgconfig
-PKGCONFIG += libhardware android-headers connman-qt5 qofono-qt5 qofonoext
+PKGCONFIG += libhardware android-headers connman-qt5 qofono-qt5 qofonoext systemsettings
 
 LIBS += -lrt
-
-dbus_power_control.files = com.jollamobile.gps.Device.xml
-dbus_power_control.header_flags = "-l DeviceControl -i devicecontrol.h"
-dbus_power_control.source_flags = "-l DeviceControl"
 
 dbus_geoclue.files = \
     org.freedesktop.Geoclue.xml \
@@ -25,7 +21,6 @@ dbus_geoclue.header_flags = "-l HybrisProvider -i hybrisprovider.h"
 dbus_geoclue.source_flags = "-l HybrisProvider"
 
 DBUS_ADAPTORS = \
-    dbus_power_control \
     dbus_geoclue
 
 DBUS_INTERFACES = \
@@ -43,13 +38,11 @@ geoclue_provider.path = /usr/share/geoclue-providers
 
 HEADERS += \
     hybrisprovider.h \
-    locationtypes.h \
-    devicecontrol.h
+    locationtypes.h
 
 SOURCES += \
     main.cpp \
-    hybrisprovider.cpp \
-    devicecontrol.cpp
+    hybrisprovider.cpp
 
 OTHER_FILES = \
     $${session_dbus_service.files} \
