@@ -430,7 +430,7 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, QList<SatelliteIn
 HybrisProvider::HybrisProvider(QObject *parent)
 :   QObject(parent), m_gps(0), m_agps(0), m_agpsril(0), m_gpsni(0), m_xtra(0),
     m_status(StatusUnavailable), m_positionInjectionConnected(false), m_xtraDownloadReply(0),
-    m_requestedConnect(false), m_gpsStarted(false), m_deviceControl(0),
+    m_requestedConnect(false), m_gpsStarted(false), m_locationSettings(0),
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(0),
     m_ofonoExtModemManager(new QOfonoExtModemManager(this)),
     m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(0), m_ntpSocket(0),
@@ -446,14 +446,6 @@ HybrisProvider::HybrisProvider(QObject *parent)
     qDBusRegisterMetaType<QList<SatelliteInfo> >();
 
     staticProvider = this;
-
-    m_locationSettings = new QFileSystemWatcher(this);
-    connect(m_locationSettings, SIGNAL(fileChanged(QString)),
-            this, SLOT(locationEnabledChanged()));
-    connect(m_locationSettings, SIGNAL(directoryChanged(QString)),
-            this, SLOT(locationEnabledChanged()));
-    m_locationSettings->addPath(LocationSettingsDir);
-    m_locationSettings->addPath(LocationSettingsFile);
 
     new GeoclueAdaptor(this);
     new PositionAdaptor(this);
@@ -565,20 +557,23 @@ HybrisProvider::~HybrisProvider()
         staticProvider = 0;
 }
 
-void HybrisProvider::setDeviceController(DeviceControl *control)
+void HybrisProvider::setLocationSettings(LocationSettings *settings)
 {
-    if (m_deviceControl == control)
-        return;
-
-    if (m_deviceControl) {
-        disconnect(m_deviceControl, SIGNAL(poweredChanged()),
-                   this, SLOT(locationEnabledChanged()));
+    if (!m_locationSettings) {
+        m_locationSettings = settings;
+        connect(m_locationSettings, &LocationSettings::locationEnabledChanged,
+                this, &HybrisProvider::locationEnabledChanged);
+        connect(m_locationSettings, &LocationSettings::gpsEnabledChanged,
+                this, &HybrisProvider::locationEnabledChanged);
+        connect(m_locationSettings, &LocationSettings::gpsFlightModeChanged,
+                this, &HybrisProvider::locationEnabledChanged);
+        connect(m_locationSettings, &LocationSettings::hereStateChanged,
+                this, &HybrisProvider::locationEnabledChanged);
+        connect(m_locationSettings, &LocationSettings::mlsEnabledChanged,
+                this, &HybrisProvider::locationEnabledChanged);
+        connect(m_locationSettings, &LocationSettings::mlsOnlineStateChanged,
+                this, &HybrisProvider::locationEnabledChanged);
     }
-
-    m_deviceControl = control;
-
-    if (m_deviceControl)
-        connect(m_deviceControl, SIGNAL(poweredChanged()), this, SLOT(locationEnabledChanged()));
 }
 
 void HybrisProvider::AddReference()
@@ -1361,37 +1356,20 @@ void HybrisProvider::setStatus(HybrisProvider::Status status)
 
 /*
     Returns true if positioning is enabled, otherwise returns false.
-
-    Currently checks the state of the Location enabled setting and flight mode.
 */
 bool HybrisProvider::positioningEnabled()
 {
-    QSettings settings(LocationSettingsFile, QSettings::IniFormat);
+    // update our AGPS enablement states, used for position injection and mode capability.
+    m_agpsEnabled = (m_locationSettings->hereAvailable() && m_locationSettings->hereState() == LocationSettings::OnlineAGpsEnabled)
+                 || (m_locationSettings->mlsAvailable()  && m_locationSettings->mlsEnabled());
+    m_agpsOnlineEnabled = (m_locationSettings->hereAvailable() && m_locationSettings->hereState() == LocationSettings::OnlineAGpsEnabled)
+                       || (m_locationSettings->mlsAvailable()  && m_locationSettings->mlsOnlineState() == LocationSettings::OnlineAGpsEnabled);
 
-    // check the keys related to agps enablement.  We can have multiple agps providers.
-    bool agpsAgreementAccepted = false;
-    bool agpsEnabled = false;
-    bool agpsOnlineEnabled = false;
-    QString agpsProviders = settings.value(LocationSettingsAgpsProvidersKey, QStringLiteral("here")).toString();
-    Q_FOREACH (const QString &agpsProvider, agpsProviders.split(',', QString::SkipEmptyParts)) {
-        agpsAgreementAccepted = settings.value(LocationSettingsAgpsAgreementAcceptedKey.arg(agpsProvider), false).toBool();
-        agpsEnabled = settings.value(LocationSettingsAgpsEnabledKey.arg(agpsProvider), false).toBool();
-        agpsOnlineEnabled = settings.value(LocationSettingsAgpsOnlineEnabledKey.arg(agpsProvider), false).toBool();
-        if (agpsAgreementAccepted && agpsEnabled && agpsOnlineEnabled) {
-            break;
-        }
-    }
-    // check the deprecated keys, also:
-    bool oldAgpsAgreementAccepted = settings.value(LocationSettingsOldAgpsAgreementAcceptedKey, false).toBool();
-    bool oldAgpsEnabled = settings.value(LocationSettingsOldAgpsEnabledKey, false).toBool();
-    m_agpsEnabled = (agpsAgreementAccepted || oldAgpsAgreementAccepted) && (agpsEnabled || oldAgpsEnabled);
-    m_agpsOnlineEnabled = agpsOnlineEnabled || (oldAgpsAgreementAccepted && oldAgpsEnabled);
-
-    // check the keys related to the location and gps enablement, plus gps power state
-    bool locationEnabled = settings.value(LocationSettingsEnabledKey, false).toBool();
-    bool gpsEnabled = settings.value(LocationSettingsGpsEnabledKey, true).toBool(); // defaults to true if no key exists but location is enabled.
-    bool powered = m_deviceControl->powered();
-    return locationEnabled && gpsEnabled && powered;
+    // enable GPS positioning if location and the GPS are enabled, and the GPS is not in flight mode.
+    return m_locationSettings->locationEnabled()
+       &&  m_locationSettings->gpsAvailable()
+       &&  m_locationSettings->gpsEnabled()
+       && !m_locationSettings->gpsFlightMode();
 }
 
 quint32 HybrisProvider::minimumRequestedUpdateInterval() const

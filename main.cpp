@@ -17,6 +17,8 @@
 #include "hybrisprovider.h"
 #include "devicecontrol.h"
 
+#include <locationsettings.h>
+
 #include <unistd.h>
 #include <sys/types.h>
 #include <grp.h>
@@ -70,7 +72,8 @@ int main(int argc, char *argv[])
 
     // Register service on DBus system bus prior to dropping privileges.
     QDBusConnection system = QDBusConnection::systemBus();
-    DeviceControl control;
+    LocationSettings settings;
+    DeviceControl control(&settings);
     if (!system.registerObject(QStringLiteral("/com/jollamobile/gps/Device"), &control))
         qFatal("Failed to register object /com/jollamobile/gps/Device");
     if (!system.registerService(QStringLiteral("com.jollamobile.gps")))
@@ -85,11 +88,11 @@ int main(int argc, char *argv[])
 
     QDBusConnection session = QDBusConnection::sessionBus();
     HybrisProvider provider;
+    provider.setLocationSettings(&settings);
     if (!session.registerObject(QStringLiteral("/org/freedesktop/Geoclue/Providers/Hybris"), &provider))
         qFatal("Failed to register object /org/freedesktop/Geoclue/Providers/Hybris");
     if (!session.registerService(QStringLiteral("org.freedesktop.Geoclue.Providers.Hybris")))
         qFatal("Failed to register service org.freedesktop.Geoclue.Providers.Hybris");
-    provider.setDeviceController(&control);
 
     return a.exec();
 }
