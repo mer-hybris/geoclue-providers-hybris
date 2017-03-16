@@ -16,23 +16,27 @@
 
 #include <QtDBus/QDBusVariant>
 
-DeviceControl::DeviceControl(QObject *parent)
-:   QObject(parent), m_powered(false)
+DeviceControl::DeviceControl(LocationSettings *settings, QObject *parent)
+:   QObject(parent), m_settings(settings)
 {
+    connect(m_settings, &LocationSettings::gpsFlightModeChanged,
+            [this] {
+                emit this->poweredChanged();
+                emit PropertyChanged(QStringLiteral("Powered"), QDBusVariant(!this->m_settings->gpsFlightMode()));
+            });
+
     new DeviceAdaptor(this);
 }
 
 bool DeviceControl::powered() const
 {
-    return m_powered;
+    return !m_settings->gpsFlightMode();
 }
 
-void DeviceControl::setPowered(bool powered)
+void DeviceControl::setPowered(bool newPowered)
 {
-    if (m_powered == powered)
-        return;
-
-    m_powered = powered;
-    emit poweredChanged();
-    emit PropertyChanged(QStringLiteral("Powered"), QDBusVariant(powered));
+    // powered is the inverse of flight mode, so if they're the same it needs updating.
+    if (m_settings->gpsFlightMode() == newPowered) {
+        m_settings->setGpsFlightMode(!newPowered);
+    }
 }

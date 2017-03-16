@@ -14,6 +14,7 @@ BuildRequires: pkgconfig(android-headers)
 BuildRequires: pkgconfig(connman-qt5) >= 1.0.68
 BuildRequires: pkgconfig(qofono-qt5)
 BuildRequires: pkgconfig(qofonoext)
+BuildRequires: pkgconfig(systemsettings)
 BuildRequires: oneshot
 Requires: connectionagent-qt5 >= 0.9.20
 Requires: oneshot

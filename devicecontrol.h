@@ -14,26 +14,32 @@
 #define DEVICECONTROL_H
 
 #include <QtCore/QObject>
+#include <QtCore/QString>
+
+#include <locationsettings.h>
 
 QT_FORWARD_DECLARE_CLASS(QDBusVariant)
+
+/* DeviceControl provides a mechanism which connman can use
+ * to disable the GPS when Flight Mode is activated */
 
 class DeviceControl : public QObject
 {
     Q_OBJECT
-
     Q_PROPERTY(bool Powered READ powered WRITE setPowered NOTIFY poweredChanged)
 
 public:
-    explicit DeviceControl(QObject *parent = 0);
+    explicit DeviceControl(LocationSettings *settings, QObject *parent = 0);
 
     bool powered() const;
-    void setPowered(bool powered);
+    void setPowered(bool newPowered);
 
 signals:
     void PropertyChanged(const QString &name, const QDBusVariant &value);
     void poweredChanged();
 
 private:
+    LocationSettings *m_settings;
     bool m_powered;
 };
 
