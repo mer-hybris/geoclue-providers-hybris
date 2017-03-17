@@ -15,7 +15,8 @@
 #include <QtDBus/QDBusConnection>
 
 #include "hybrisprovider.h"
-#include "devicecontrol.h"
+
+#include <locationsettings.h>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -68,14 +69,6 @@ int main(int argc, char *argv[])
     if (numberGroups == -1)
         qFatal("Failed to set supplementary groups, %s", strerror(errno));
 
-    // Register service on DBus system bus prior to dropping privileges.
-    QDBusConnection system = QDBusConnection::systemBus();
-    DeviceControl control;
-    if (!system.registerObject(QStringLiteral("/com/jollamobile/gps/Device"), &control))
-        qFatal("Failed to register object /com/jollamobile/gps/Device");
-    if (!system.registerService(QStringLiteral("com.jollamobile.gps")))
-        qFatal("Failed to register service com.jollamobile.gps");
-
 #if GEOCLUE_ANDROID_GPS_INTERFACE != 2
     // Drop privileges.
     result = setuid(realUid);
@@ -84,12 +77,13 @@ int main(int argc, char *argv[])
 #endif
 
     QDBusConnection session = QDBusConnection::sessionBus();
+    LocationSettings settings;
     HybrisProvider provider;
+    provider.setLocationSettings(&settings);
     if (!session.registerObject(QStringLiteral("/org/freedesktop/Geoclue/Providers/Hybris"), &provider))
         qFatal("Failed to register object /org/freedesktop/Geoclue/Providers/Hybris");
     if (!session.registerService(QStringLiteral("org.freedesktop.Geoclue.Providers.Hybris")))
         qFatal("Failed to register service org.freedesktop.Geoclue.Providers.Hybris");
-    provider.setDeviceController(&control);
 
     return a.exec();
 }

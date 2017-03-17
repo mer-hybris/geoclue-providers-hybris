@@ -23,6 +23,8 @@
 #include <android-version.h>
 #include <hardware/gps.h>
 
+#include <locationsettings.h>
+
 #include "locationtypes.h"
 
 // Define versions of the Android GPS interface supported.
@@ -59,7 +61,7 @@ public:
     explicit HybrisProvider(QObject *parent = 0);
     ~HybrisProvider();
 
-    void setDeviceController(DeviceControl *control);
+    void setLocationSettings(LocationSettings *settings);
 
     // org.freedesktop.Geoclue
     void AddReference();
@@ -211,8 +213,6 @@ private:
 
     Status m_status;
 
-    QFileSystemWatcher *m_locationSettings;
-
     bool m_positionInjectionConnected;
 
     QNetworkAccessManager *m_manager;
@@ -229,7 +229,7 @@ private:
 
     bool m_gpsStarted;
 
-    DeviceControl *m_deviceControl;
+    LocationSettings *m_locationSettings;
 
     NetworkManager *m_networkManager;
     NetworkTechnology *m_cellularTechnology;
