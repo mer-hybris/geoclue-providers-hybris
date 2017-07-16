@@ -28,7 +28,9 @@
 #include "locationtypes.h"
 
 // Define versions of the Android GPS interface supported.
-#if ANDROID_VERSION_MAJOR >= 5
+#if ANDROID_VERSION_MAJOR >= 7
+    #define GEOCLUE_ANDROID_GPS_INTERFACE 3
+#elif ANDROID_VERSION_MAJOR >= 5
     #define GEOCLUE_ANDROID_GPS_INTERFACE 2
 #elif ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
     #define GEOCLUE_ANDROID_GPS_INTERFACE 1
