@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
 
     supplementaryGroups[numberGroups++] = group->gr_gid;
 
-#if GEOCLUE_ANDROID_GPS_INTERFACE == 2
+#if GEOCLUE_ANDROID_GPS_INTERFACE >= 2
     group = getgrnam("net_raw");
     if (group) {
         if (numberGroups + 1 > NGROUPS_MAX)
@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
     if (numberGroups == -1)
         qFatal("Failed to set supplementary groups, %s", strerror(errno));
 
-#if GEOCLUE_ANDROID_GPS_INTERFACE != 2
+#if GEOCLUE_ANDROID_GPS_INTERFACE == 1
     // Drop privileges.
     result = setuid(realUid);
     if (result == -1)
