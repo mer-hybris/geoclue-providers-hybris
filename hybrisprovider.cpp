@@ -71,6 +71,9 @@ const QString LocationSettingsAgpsProvidersKey = QStringLiteral("location/agps_p
 const QString LocationSettingsOldAgpsEnabledKey = QStringLiteral("location/agreement_accepted");
 const QString LocationSettingsOldAgpsAgreementAcceptedKey = QStringLiteral("location/here_agreement_accepted");
 
+const int MaxXtraServers = 3;
+const QString XtraConfigFile = QStringLiteral("/etc/gps_xtra.ini");
+
 void locationCallback(GpsLocation *location)
 {
     Location loc;
@@ -465,12 +468,12 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, QList<SatelliteIn
 
 HybrisProvider::HybrisProvider(QObject *parent)
 :   QObject(parent), m_gps(0), m_agps(0), m_agpsril(0), m_gpsni(0), m_xtra(0),
-    m_status(StatusUnavailable), m_positionInjectionConnected(false), m_xtraDownloadReply(0),
+    m_status(StatusUnavailable), m_positionInjectionConnected(false), m_xtraDownloadReply(0), m_xtraServerIndex(0),
     m_requestedConnect(false), m_gpsStarted(false), m_locationSettings(0),
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(0),
     m_ofonoExtModemManager(new QOfonoExtModemManager(this)),
     m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(0), m_ntpSocket(0),
-    m_agpsEnabled(false), m_agpsOnlineEnabled(false)
+    m_agpsEnabled(false), m_agpsOnlineEnabled(false), m_useForcedXtraInject(false), m_xtraUserAgent("")
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -491,6 +494,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_manager = new QNetworkAccessManager(this);
 
     connect(m_networkManager, SIGNAL(technologiesChanged()), this, SLOT(technologiesChanged()));
+    connect(m_networkManager, SIGNAL(stateChanged(QString)), this, SLOT(stateChanged(QString)));
 
     technologiesChanged();
 
@@ -518,6 +522,48 @@ HybrisProvider::HybrisProvider(QObject *parent)
 
     if (m_watchedServices.isEmpty()) {
         m_idleTimer.start(QuitIdleTime, this);
+    }
+
+    QString xtraUserAgentFileName;
+    QSettings settings(XtraConfigFile, QSettings::IniFormat);
+    QString xtraServer;
+
+    for (int i = 0; i < MaxXtraServers; i++) {
+        QString key = QString("xtra/XTRA_SERVER_%1").arg(i);
+        xtraServer = settings.value(key, "").toString();
+        if (xtraServer != "") {
+            m_xtraServers.enqueue(xtraServer);
+        }
+    }
+
+    m_useForcedXtraInject = settings.value("xtra/XTRA_FORCE_INJECT", "").toBool();
+
+    xtraUserAgentFileName = settings.value("xtra/XTRA_USERAGENT_FILE", "").toString();
+    if (xtraUserAgentFileName != "") {
+        QFile xtraUserAgentFile(xtraUserAgentFileName);
+        if (xtraUserAgentFile.open(QIODevice::ReadOnly)) {
+            m_xtraUserAgent = xtraUserAgentFile.readLine();
+        }
+    }
+
+    if (m_xtraServers.isEmpty()) {
+        QFile gpsConf(QStringLiteral("/system/etc/gps.conf"));
+        if (!gpsConf.open(QIODevice::ReadOnly))
+            return;
+
+        while (!gpsConf.atEnd()) {
+            const QByteArray line = gpsConf.readLine().trimmed();
+            if (line.startsWith('#'))
+                continue;
+
+            const QList<QByteArray> split = line.split('=');
+            if (split.length() != 2)
+                continue;
+
+            const QByteArray key = split.at(0).trimmed();
+            if (key == "XTRA_SERVER_1" || key == "XTRA_SERVER_2" || key == "XTRA_SERVER_3")
+                m_xtraServers.enqueue(QUrl::fromEncoded(split.at(1).trimmed()));
+        }
     }
 
     const hw_module_t *hwModule;
@@ -986,36 +1032,26 @@ void HybrisProvider::xtraDownloadRequest()
 
     qCDebug(lcGeoclueHybris) << "xtra download requested";
 
-    QFile gpsConf(QStringLiteral("/system/etc/gps.conf"));
-    if (!gpsConf.open(QIODevice::ReadOnly))
-        return;
-
-    while (!gpsConf.atEnd()) {
-        const QByteArray line = gpsConf.readLine().trimmed();
-        if (line.startsWith('#'))
-            continue;
-
-        const QList<QByteArray> split = line.split('=');
-        if (split.length() != 2)
-            continue;
-
-        const QByteArray key = split.at(0).trimmed();
-        if (key == "XTRA_SERVER_1" || key == "XTRA_SERVER_2" || key == "XTRA_SERVER_3")
-            m_xtraServers.enqueue(QUrl::fromEncoded(split.at(1).trimmed()));
-    }
+    m_xtraServerIndex = 0;
 
     xtraDownloadRequestSendNext();
 }
 
 void HybrisProvider::xtraDownloadRequestSendNext()
 {
-    if (m_xtraServers.isEmpty())
+    if (m_xtraServerIndex >= m_xtraServers.count())
         return;
 
     qCDebug(lcGeoclueHybris) << m_xtraServers;
 
-    m_xtraDownloadReply = m_manager->get(QNetworkRequest(m_xtraServers.dequeue()));
+    QNetworkRequest network_request(m_xtraServers[m_xtraServerIndex]);
+    if (m_xtraUserAgent != "") {
+        network_request.setRawHeader("User-Agent", m_xtraUserAgent.toUtf8());
+    }
+    m_xtraDownloadReply = m_manager->get(network_request);
     connect(m_xtraDownloadReply, SIGNAL(finished()), this, SLOT(xtraDownloadFinished()));
+
+    m_xtraServerIndex++;
 }
 
 void HybrisProvider::xtraDownloadFinished()
@@ -1039,9 +1075,9 @@ void HybrisProvider::xtraDownloadFinished()
         QByteArray xtraData = m_xtraDownloadReply->readAll();
         m_xtra->inject_xtra_data(xtraData.data(), xtraData.length());
 
-        m_xtraDownloadReply = 0;
+        qCDebug(lcGeoclueHybris) << "injected " << xtraData.length() << " bytes of xtra data";
 
-        m_xtraServers.clear();
+        m_xtraDownloadReply = 0;
     }
 }
 
@@ -1207,6 +1243,15 @@ void HybrisProvider::technologiesChanged()
     }
 }
 
+void HybrisProvider::stateChanged(const QString &state)
+{
+    if (state == "online") {
+        if (m_gpsStarted && m_useForcedXtraInject) {
+            gpsXtraDownloadRequest();
+        }
+    }
+}
+
 void HybrisProvider::defaultDataModemChanged(const QString &modem)
 {
     qCDebug(lcGeoclueHybris) << "Default data modem changed to" << modem;
@@ -1347,6 +1392,10 @@ void HybrisProvider::startPositioningIfNeeded()
     }
 
     m_gpsStarted = true;
+
+    if (m_useForcedXtraInject && m_networkManager->state() == "online") {
+        gpsXtraDownloadRequest();
+    }
 }
 
 void HybrisProvider::stopPositioningIfNeeded()

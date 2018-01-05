@@ -155,6 +155,7 @@ private slots:
     void engineOff();
 
     void technologiesChanged();
+    void stateChanged(const QString &state);
     void defaultDataModemChanged(const QString &modem);
     void connectionManagerValidChanged();
     void connectionContextValidChanged();
@@ -220,6 +221,7 @@ private:
     QNetworkAccessManager *m_manager;
     QNetworkReply *m_xtraDownloadReply;
     QQueue<QUrl> m_xtraServers;
+    int m_xtraServerIndex;
 
     ComJollaConnectiondInterface *m_connectiond;
     ComJollaLipstickConnectionSelectorIfInterface *m_connectionSelector;
@@ -235,6 +237,7 @@ private:
 
     NetworkManager *m_networkManager;
     NetworkTechnology *m_cellularTechnology;
+    NetworkTechnology *m_wifiTechnology;
 
     QOfonoExtModemManager *m_ofonoExtModemManager;
     QOfonoConnectionManager *m_connectionManager;
@@ -248,6 +251,8 @@ private:
 
     bool m_agpsEnabled;
     bool m_agpsOnlineEnabled;
+    bool m_useForcedXtraInject;
+    QString m_xtraUserAgent;
     double m_magneticVariation;
 };
 
