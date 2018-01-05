@@ -38,6 +38,8 @@
 
 #include <qofonoextmodemmanager.h>
 
+#include <android-config.h>
+
 #include <strings.h>
 #include <sys/time.h>
 
@@ -159,6 +161,28 @@ void gnssSvStatusCallback(GnssSvStatus *svStatus)
 
         if (svInfo.flags & GNSS_SV_FLAGS_USED_IN_FIX)
             usedPrns.append(svInfo.svid);
+    }
+
+    QMetaObject::invokeMethod(staticProvider, "setSatellite", Qt::QueuedConnection,
+                              Q_ARG(QList<SatelliteInfo>, satellites),
+                              Q_ARG(QList<int>, usedPrns));
+}
+#endif
+
+#ifdef USE_GPS_VENDOR_EXTENSION
+void gnssSvStatusCallback_custom(GnssSvStatus *svStatus)
+{
+    QList<SatelliteInfo> satellites;
+    QList<int> usedPrns;
+
+    for (int i = 0; i < svStatus->num_svs; ++i) {
+        SatelliteInfo satInfo;
+        GnssSvInfo &svInfo = svStatus->sv_list[i];
+        satInfo.setPrn(svInfo.prn);
+        satInfo.setSnr(svInfo.snr);
+        satInfo.setElevation(svInfo.elevation);
+        satInfo.setAzimuth(svInfo.azimuth);
+        satellites.append(satInfo);
     }
 
     QMetaObject::invokeMethod(staticProvider, "setSatellite", Qt::QueuedConnection,
@@ -351,6 +375,9 @@ GpsCallbacks gpsCallbacks = {
     locationCallback,
     statusCallback,
     svStatusCallback,
+#ifdef USE_GPS_VENDOR_EXTENSION
+    gnssSvStatusCallback_custom,
+#endif
     nmeaCallback,
     setCapabilitiesCallback,
     acquireWakelockCallback,
