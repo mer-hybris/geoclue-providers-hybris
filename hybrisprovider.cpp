@@ -575,21 +575,21 @@ HybrisProvider::HybrisProvider(QObject *parent)
 
     if (m_xtraServers.isEmpty()) {
         QFile gpsConf(QStringLiteral("/system/etc/gps.conf"));
-        if (!gpsConf.open(QIODevice::ReadOnly))
-            return;
+        if (gpsConf.open(QIODevice::ReadOnly)) {
 
-        while (!gpsConf.atEnd()) {
-            const QByteArray line = gpsConf.readLine().trimmed();
-            if (line.startsWith('#'))
-                continue;
+            while (!gpsConf.atEnd()) {
+                const QByteArray line = gpsConf.readLine().trimmed();
+                if (line.startsWith('#'))
+                    continue;
 
-            const QList<QByteArray> split = line.split('=');
-            if (split.length() != 2)
-                continue;
+                const QList<QByteArray> split = line.split('=');
+                if (split.length() != 2)
+                    continue;
 
-            const QByteArray key = split.at(0).trimmed();
-            if (key == "XTRA_SERVER_1" || key == "XTRA_SERVER_2" || key == "XTRA_SERVER_3")
-                m_xtraServers.enqueue(QUrl::fromEncoded(split.at(1).trimmed()));
+                const QByteArray key = split.at(0).trimmed();
+                if (key == "XTRA_SERVER_1" || key == "XTRA_SERVER_2" || key == "XTRA_SERVER_3")
+                    m_xtraServers.enqueue(QUrl::fromEncoded(split.at(1).trimmed()));
+            }
         }
     }
 

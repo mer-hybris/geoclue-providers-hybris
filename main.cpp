@@ -55,6 +55,21 @@ int main(int argc, char *argv[])
 
     supplementaryGroups[numberGroups++] = group->gr_gid;
 
+    // remove audio, radio and bluetooth groups to avoid confusion in BSP
+    char *groups_to_remove[] = {"bluetooth", "radio", "audio", NULL};
+
+    int idx = 0;
+    while (groups_to_remove[idx]) {
+        group = getgrnam(groups_to_remove[idx]);
+        idx++;
+
+        if (idx + 1 < numberGroups) {
+            memmove((void*)&supplementaryGroups[idx], (void*)&supplementaryGroups[idx + 1], (numberGroups - idx - 1) * sizeof(gid_t));
+        }
+
+        numberGroups--;
+    }
+
 #if GEOCLUE_ANDROID_GPS_INTERFACE >= 2
     group = getgrnam("net_raw");
     if (group) {
