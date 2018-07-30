@@ -26,7 +26,7 @@ Requires: connectionagent-qt5 >= 0.9.20
 
 
 %build
-qmake -qt=5 geoclue-providers-hybris.pro
+qmake -qt=5 hal/hallocationbackend.pro
 make %{?_smp_mflags}
 
 
