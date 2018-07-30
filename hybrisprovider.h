@@ -13,6 +13,7 @@
 #ifndef HYBRISPROVIDER_H
 #define HYBRISPROVIDER_H
 
+#include <QtCore/QLoggingCategory>
 #include <QtCore/QObject>
 #include <QtCore/QStringList>
 #include <QtCore/QBasicTimer>
@@ -20,23 +21,15 @@
 #include <QtDBus/QDBusContext>
 #include <QtNetwork/QNetworkReply>
 
-#include <android-version.h>
-#include <hardware/gps.h>
+#include "hybrislocationbackend.h"
 
 #include <locationsettings.h>
 
 #include "locationtypes.h"
 
-// Define versions of the Android GPS interface supported.
-#if ANDROID_VERSION_MAJOR >= 7
-    #define GEOCLUE_ANDROID_GPS_INTERFACE 3
-#elif ANDROID_VERSION_MAJOR >= 5
-    #define GEOCLUE_ANDROID_GPS_INTERFACE 2
-#elif ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2
-    #define GEOCLUE_ANDROID_GPS_INTERFACE 1
-#else
-    // By default expects Android 4.1
-#endif
+Q_DECLARE_LOGGING_CATEGORY(lcGeoclueHybris)
+Q_DECLARE_LOGGING_CATEGORY(lcGeoclueHybrisNmea)
+Q_DECLARE_LOGGING_CATEGORY(lcGeoclueHybrisPosition)
 
 QT_FORWARD_DECLARE_CLASS(QFileSystemWatcher)
 QT_FORWARD_DECLARE_CLASS(QDBusServiceWatcher)
@@ -57,6 +50,7 @@ class QOfonoConnectionContext;
 
 class HybrisProvider : public QObject, public QDBusContext
 {
+friend class HybrisBackend;
     Q_OBJECT
 
 public:
@@ -178,16 +172,7 @@ private:
     void processConnectionContexts();
     void processNextConnectionContext();
 
-    gps_device_t *m_gpsDevice;
-
-    const GpsInterface *m_gps;
-
-    const AGpsInterface *m_agps;
-    const AGpsRilInterface *m_agpsril;
-    const GpsNiInterface *m_gpsni;
-    const GpsXtraInterface *m_xtra;
-
-    const GpsDebugInterface *m_debug;
+    HybrisLocationBackend *m_backend;
 
     Location m_currentLocation;
 
@@ -255,6 +240,8 @@ private:
     QString m_xtraUserAgent;
     double m_magneticVariation;
 };
+
+extern HybrisProvider *staticProvider;
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::PositionFields)
 Q_DECLARE_OPERATORS_FOR_FLAGS(HybrisProvider::VelocityFields)

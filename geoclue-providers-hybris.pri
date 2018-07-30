@@ -8,7 +8,7 @@ target.path = /usr/libexec
 QT = core dbus network
 
 CONFIG += link_pkgconfig
-PKGCONFIG += libhardware android-headers connman-qt5 qofono-qt5 qofonoext systemsettings
+PKGCONFIG += connman-qt5 qofono-qt5 qofonoext systemsettings
 
 LIBS += -lrt
 
@@ -37,6 +37,7 @@ geoclue_provider.files = geoclue-hybris.provider
 geoclue_provider.path = /usr/share/geoclue-providers
 
 HEADERS += \
+    hybrislocationbackend.h \
     hybrisprovider.h \
     locationtypes.h
 
