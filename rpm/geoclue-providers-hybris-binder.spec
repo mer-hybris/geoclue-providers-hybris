@@ -1,4 +1,4 @@
-Name: geoclue-provider-hybris
+Name: geoclue-provider-hybris-binder
 Version: 0.0.1
 Release: 1
 Summary: Geoinformation Service Hybris Provider
@@ -9,13 +9,13 @@ Source: %{name}-%{version}.tar.gz
 BuildRequires: pkgconfig(Qt5Core)
 BuildRequires: pkgconfig(Qt5DBus)
 BuildRequires: pkgconfig(Qt5Network)
-BuildRequires: pkgconfig(libhardware)
-BuildRequires: pkgconfig(android-headers)
 BuildRequires: pkgconfig(connman-qt5) >= 1.0.68
+BuildRequires: pkgconfig(libgbinder)
 BuildRequires: pkgconfig(qofono-qt5)
 BuildRequires: pkgconfig(qofonoext)
 BuildRequires: pkgconfig(systemsettings)
 Requires: connectionagent-qt5 >= 0.9.20
+Provides: geoclue-provider-hybris
 
 %description
 %{summary}.
@@ -26,7 +26,7 @@ Requires: connectionagent-qt5 >= 0.9.20
 
 
 %build
-qmake -qt=5 hal/hallocationbackend.pro
+qmake -qt=5 binder/binderlocationbackend.pro
 make %{?_smp_mflags}
 
 
@@ -40,4 +40,3 @@ make INSTALL_ROOT=%{buildroot} install
 %{_sysconfdir}/dbus-1
 %{_datadir}/dbus-1
 %{_datadir}/geoclue-providers/geoclue-hybris.provider
-
