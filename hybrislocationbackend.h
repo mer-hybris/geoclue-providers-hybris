@@ -46,6 +46,9 @@ typedef uint16_t HybrisAGnssType;
 typedef uint16_t HybrisAGnssSetIDType;
 
 typedef uint16_t HybrisApnIpType;
+
+typedef int16_t HybrisAGpsBearerType;
+
 /**
  * HybrisGnssNiType constants
  */
