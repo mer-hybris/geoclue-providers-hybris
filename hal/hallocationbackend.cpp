@@ -125,13 +125,13 @@ void gnssSvStatusCallback(GnssSvStatus *svStatus)
         int prn = svInfo.svid;
         // From https://github.com/barbeau/gpstest
         // and https://github.com/mvglasow/satstat/wiki/NMEA-IDs
-        if (svInfo.constellation == GnssConstellationType::SBAS) {
+        if (svInfo.constellation == GNSS_CONSTELLATION_SBAS) {
             prn -= 87;
-        } else if (svInfo.constellation == GLONASS) {
+        } else if (svInfo.constellation == GNSS_CONSTELLATION_GLONASS) {
             prn += 64;
-        } else if (svInfo.constellation == BEIDOU) {
+        } else if (svInfo.constellation == GNSS_CONSTELLATION_BEIDOU) {
             prn += 200;
-        } else if (svInfo.constellation == GALILEO) {
+        } else if (svInfo.constellation == GNSS_CONSTELLATION_GALILEO) {
             prn += 300;
         }
         satInfo.setPrn(prn);
