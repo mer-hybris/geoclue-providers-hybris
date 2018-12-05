@@ -300,7 +300,7 @@ static GBinderLocalReply *geoclue_binder_gnss_callback(
 
             for (int i = 0; i < svStatus->numSvs; ++i) {
                 SatelliteInfo satInfo;
-                GnssSvInfo svInfo = svStatus->gnssSvList.data[i];
+                GnssSvInfo svInfo = svStatus->gnssSvList[i];
                 satInfo.setSnr(svInfo.cN0Dbhz);
                 satInfo.setElevation(svInfo.elevationDegrees);
                 satInfo.setAzimuth(svInfo.azimuthDegrees);
@@ -449,7 +449,7 @@ static GBinderLocalReply *geoclue_binder_agnss_callback(
             const AGnssStatusIpV6 *status = geoclue_binder_gnss_decode_struct
                 (AGnssStatusIpV6, &reader);
 
-            ipv6.setAddress(status->ipV6Addr.data);
+            ipv6.setAddress(status->ipV6Addr);
 
             QMetaObject::invokeMethod(staticProvider, "agpsStatus", Qt::QueuedConnection,
                                       Q_ARG(qint16, status->type), Q_ARG(quint16, status->status),
