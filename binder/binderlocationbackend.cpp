@@ -576,11 +576,19 @@ void BinderLocationBackend::dropGnss()
         gbinder_local_object_drop(m_callbackGnss);
         m_callbackGnss = Q_NULLPTR;
     }
+    if (m_clientGnss) {
+        gbinder_client_unref(m_clientGnss);
+        m_clientGnss = Q_NULLPTR;
+    }
     if (m_remoteGnss) {
         gbinder_remote_object_remove_handler(m_remoteGnss, m_death_id);
         gbinder_remote_object_unref(m_remoteGnss);
         m_death_id = 0;
         m_remoteGnss = Q_NULLPTR;
+    }
+    if (m_clientGnssDebug) {
+        gbinder_client_unref(m_clientGnssDebug);
+        m_clientGnssDebug = Q_NULLPTR;
     }
     if (m_remoteGnssDebug) {
         gbinder_remote_object_unref(m_remoteGnssDebug);
@@ -590,6 +598,10 @@ void BinderLocationBackend::dropGnss()
         gbinder_local_object_drop(m_callbackGnssNi);
         m_callbackGnssNi = Q_NULLPTR;
     }
+    if (m_clientGnssNi) {
+        gbinder_client_unref(m_clientGnssNi);
+        m_clientGnssNi = Q_NULLPTR;
+    }
     if (m_remoteGnssNi) {
         gbinder_remote_object_unref(m_remoteGnssNi);
         m_remoteGnssNi = Q_NULLPTR;
@@ -597,6 +609,10 @@ void BinderLocationBackend::dropGnss()
     if (m_callbackGnssXtra) {
         gbinder_local_object_drop(m_callbackGnssXtra);
         m_callbackGnssXtra = Q_NULLPTR;
+    }
+    if (m_clientGnssXtra) {
+        gbinder_client_unref(m_clientGnssXtra);
+        m_clientGnssXtra = Q_NULLPTR;
     }
     if (m_remoteGnssXtra) {
         gbinder_remote_object_unref(m_remoteGnssXtra);
@@ -606,6 +622,10 @@ void BinderLocationBackend::dropGnss()
         gbinder_local_object_drop(m_callbackAGnss);
         m_callbackAGnss = Q_NULLPTR;
     }
+    if (m_clientAGnss) {
+        gbinder_client_unref(m_clientAGnss);
+        m_clientAGnss = Q_NULLPTR;
+    }
     if (m_remoteAGnss) {
         gbinder_remote_object_unref(m_remoteAGnss);
         m_remoteAGnss = Q_NULLPTR;
@@ -614,9 +634,21 @@ void BinderLocationBackend::dropGnss()
         gbinder_local_object_drop(m_callbackAGnssRil);
         m_callbackAGnssRil = Q_NULLPTR;
     }
+    if (m_clientAGnssRil) {
+        gbinder_client_unref(m_clientAGnssRil);
+        m_clientAGnssRil = Q_NULLPTR;
+    }
     if (m_remoteAGnssRil) {
         gbinder_remote_object_unref(m_remoteAGnssRil);
         m_remoteAGnssRil = Q_NULLPTR;
+    }
+    if (m_sm) {
+        gbinder_servicemanager_unref(m_sm);
+        m_sm = Q_NULLPTR;
+    }
+    if (m_fqname) {
+        g_free(m_fqname);
+        m_fqname = Q_NULLPTR;
     }
 }
 
