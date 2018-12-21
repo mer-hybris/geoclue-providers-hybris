@@ -61,6 +61,7 @@ const double KnotsToMps = 0.514444;
 const QString LocationSettingsDir = QStringLiteral("/etc/location/");
 const QString LocationSettingsFile = QStringLiteral("/etc/location/location.conf");
 const QString LocationSettingsEnabledKey = QStringLiteral("location/enabled");
+const QString LocationSettingsAllowedDataSourcesGpsKey = QStringLiteral("allowed_data_sources/gps");
 const QString LocationSettingsGpsEnabledKey = QStringLiteral("location/gps/enabled");
 const QString LocationSettingsAgpsEnabledKey = QStringLiteral("location/%1/enabled");
 const QString LocationSettingsAgpsOnlineEnabledKey = QStringLiteral("location/%1/online_enabled");
@@ -284,6 +285,8 @@ void HybrisProvider::setLocationSettings(LocationSettings *settings)
     if (!m_locationSettings) {
         m_locationSettings = settings;
         connect(m_locationSettings, &LocationSettings::locationEnabledChanged,
+                this, &HybrisProvider::locationEnabledChanged);
+        connect(m_locationSettings, &LocationSettings::allowedDataSourcesChanged,
                 this, &HybrisProvider::locationEnabledChanged);
         connect(m_locationSettings, &LocationSettings::gpsEnabledChanged,
                 this, &HybrisProvider::locationEnabledChanged);
@@ -1055,11 +1058,12 @@ bool HybrisProvider::positioningEnabled()
     m_agpsOnlineEnabled = (m_locationSettings->hereAvailable() && m_locationSettings->hereState() == LocationSettings::OnlineAGpsEnabled)
                        || (m_locationSettings->mlsAvailable()  && m_locationSettings->mlsOnlineState() == LocationSettings::OnlineAGpsEnabled);
 
-    // enable GPS positioning if location and the GPS are enabled, and the GPS is not in flight mode.
+    // enable GPS positioning if location and the GPS are enabled, and the GPS is not in flight mode - if it is allowed by MDM.
     return m_locationSettings->locationEnabled()
        &&  m_locationSettings->gpsAvailable()
        &&  m_locationSettings->gpsEnabled()
-       && !m_locationSettings->gpsFlightMode();
+       && !m_locationSettings->gpsFlightMode()
+       && (m_locationSettings->allowedDataSources() & LocationSettings::GpsData);
 }
 
 quint32 HybrisProvider::minimumRequestedUpdateInterval() const
