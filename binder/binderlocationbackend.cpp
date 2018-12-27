@@ -133,6 +133,9 @@ enum HybrisApnIpTypeEnum {
  * Implementation
  *==========================================================================*/
 
+namespace
+{
+
 HybrisApnIpType fromContextProtocol(const QString &protocol)
 {
     if (protocol == QLatin1String("ip"))
@@ -221,6 +224,8 @@ void processNmea(gint64 timestamp, const char *nmeaData)
         parseRmc(nmea);
 }
 
+const double MpsToKnots = 1.943844;
+
 static GBinderLocalReply *geoclue_binder_gnss_callback(
     GBinderLocalObject *obj,
     GBinderRemoteRequest *req,
@@ -256,7 +261,7 @@ static GBinderLocalReply *geoclue_binder_gnss_callback(
                 loc.setAltitude(location->altitudeMeters);
 
             if (location->gnssLocationFlags & HYBRIS_GNSS_LOCATION_HAS_SPEED)
-                loc.setSpeed(location->speedMetersPerSec);
+                loc.setSpeed(location->speedMetersPerSec * MpsToKnots);
 
             if (location->gnssLocationFlags & HYBRIS_GNSS_LOCATION_HAS_BEARING)
                 loc.setDirection(location->bearingDegrees);
@@ -549,6 +554,7 @@ static void geoclue_binder_gnss_gnss_died(
     self->dropGnss();
 }
 
+}
 
 /*==========================================================================*
  * Backend class
