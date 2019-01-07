@@ -325,7 +325,7 @@ static GBinderLocalReply *geoclue_binder_gnss_callback(
                 satellites.append(satInfo);
 
                 if (svInfo.svFlag & HYBRIS_GNSS_SV_FLAGS_USED_IN_FIX)
-                    usedPrns.append(svInfo.svid);
+                    usedPrns.append(prn);
             }
 
             QMetaObject::invokeMethod(staticProvider, "setSatellite", Qt::QueuedConnection,
