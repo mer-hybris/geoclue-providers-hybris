@@ -18,29 +18,6 @@
 
 #define ALIGNED(x) __attribute__ ((aligned(x)))
 
-typedef struct hidl_string {
-    union {
-        guint64 value;
-        const char *str;
-    } data;
-    guint32 len;
-    guint8 owns_buffer;
-} ALIGNED(4) HidlString;
-
-typedef struct hidl_vector {
-    union {
-        guint64 value;
-        const void *ptr;
-    } data;
-    guint32 count;
-    guint8 owns_buffer;
-} ALIGNED(4) HidlVector;
-
-template<typename T, size_t SIZE1>
-struct HidlArray {
-    T data[SIZE1];
-};
-
 typedef struct geoclue_binder_gnss GeoclueBinderGnss;
 
 typedef enum gnss_max {
@@ -108,7 +85,7 @@ G_STATIC_ASSERT(sizeof(GnssSvInfo) == 24);
 
 typedef struct gnss_sv_status {
     gint32 numSvs ALIGNED(4);
-    HidlArray<GnssSvInfo, 64> gnssSvList ALIGNED(4);
+    GnssSvInfo gnssSvList[64] ALIGNED(4);
 } ALIGNED(4) GnssSvStatus;
 
 G_STATIC_ASSERT(sizeof(GnssSvStatus) == 1540);
@@ -136,17 +113,17 @@ enum {
 };
 
 typedef struct agnss_status_ip_v4 {
-	AGnssType type ALIGNED(1);
-	AGnssStatusValue status ALIGNED(1);
-	gint32 ipV4Addr ALIGNED(4);
+    AGnssType type ALIGNED(1);
+    AGnssStatusValue status ALIGNED(1);
+    gint32 ipV4Addr ALIGNED(4);
 } ALIGNED(4) AGnssStatusIpV4;
 
 G_STATIC_ASSERT(sizeof(AGnssStatusIpV4) == 8);
 
 typedef struct agnss_status_ip_v6 {
-	AGnssType type ALIGNED(1);
-	AGnssStatusValue status ALIGNED(1);
-    HidlArray<uint8_t, 16> ipV6Addr ALIGNED(1);
+    AGnssType type ALIGNED(1);
+    AGnssStatusValue status ALIGNED(1);
+    uint8_t ipV6Addr[16] ALIGNED(1);
 } ALIGNED(1) AGnssStatusIpV6;
 
 G_STATIC_ASSERT(sizeof(AGnssStatusIpV6) == 18);

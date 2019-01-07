@@ -40,7 +40,7 @@ HybrisLocationBackend *getLocationBackend()
 namespace
 {
 
-const double KnotsToMps = 0.514444;
+const double MpsToKnots = 1.943844;
 
 void locationCallback(GpsLocation *location)
 {
@@ -57,7 +57,7 @@ void locationCallback(GpsLocation *location)
         loc.setAltitude(location->altitude);
 
     if (location->flags & GPS_LOCATION_HAS_SPEED)
-        loc.setSpeed(location->speed / KnotsToMps);
+        loc.setSpeed(location->speed * MpsToKnots);
 
     if (location->flags & GPS_LOCATION_HAS_BEARING)
         loc.setDirection(location->bearing);

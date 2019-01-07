@@ -133,6 +133,9 @@ enum HybrisApnIpTypeEnum {
  * Implementation
  *==========================================================================*/
 
+namespace
+{
+
 HybrisApnIpType fromContextProtocol(const QString &protocol)
 {
     if (protocol == QLatin1String("ip"))
@@ -221,6 +224,8 @@ void processNmea(gint64 timestamp, const char *nmeaData)
         parseRmc(nmea);
 }
 
+const double MpsToKnots = 1.943844;
+
 static GBinderLocalReply *geoclue_binder_gnss_callback(
     GBinderLocalObject *obj,
     GBinderRemoteRequest *req,
@@ -256,7 +261,7 @@ static GBinderLocalReply *geoclue_binder_gnss_callback(
                 loc.setAltitude(location->altitudeMeters);
 
             if (location->gnssLocationFlags & HYBRIS_GNSS_LOCATION_HAS_SPEED)
-                loc.setSpeed(location->speedMetersPerSec);
+                loc.setSpeed(location->speedMetersPerSec * MpsToKnots);
 
             if (location->gnssLocationFlags & HYBRIS_GNSS_LOCATION_HAS_BEARING)
                 loc.setDirection(location->bearingDegrees);
@@ -300,7 +305,7 @@ static GBinderLocalReply *geoclue_binder_gnss_callback(
 
             for (int i = 0; i < svStatus->numSvs; ++i) {
                 SatelliteInfo satInfo;
-                GnssSvInfo svInfo = svStatus->gnssSvList.data[i];
+                GnssSvInfo svInfo = svStatus->gnssSvList[i];
                 satInfo.setSnr(svInfo.cN0Dbhz);
                 satInfo.setElevation(svInfo.elevationDegrees);
                 satInfo.setAzimuth(svInfo.azimuthDegrees);
@@ -320,7 +325,7 @@ static GBinderLocalReply *geoclue_binder_gnss_callback(
                 satellites.append(satInfo);
 
                 if (svInfo.svFlag & HYBRIS_GNSS_SV_FLAGS_USED_IN_FIX)
-                    usedPrns.append(svInfo.svid);
+                    usedPrns.append(prn);
             }
 
             QMetaObject::invokeMethod(staticProvider, "setSatellite", Qt::QueuedConnection,
@@ -449,7 +454,7 @@ static GBinderLocalReply *geoclue_binder_agnss_callback(
             const AGnssStatusIpV6 *status = geoclue_binder_gnss_decode_struct
                 (AGnssStatusIpV6, &reader);
 
-            ipv6.setAddress(status->ipV6Addr.data);
+            ipv6.setAddress(status->ipV6Addr);
 
             QMetaObject::invokeMethod(staticProvider, "agpsStatus", Qt::QueuedConnection,
                                       Q_ARG(qint16, status->type), Q_ARG(quint16, status->status),
@@ -549,6 +554,7 @@ static void geoclue_binder_gnss_gnss_died(
     self->dropGnss();
 }
 
+}
 
 /*==========================================================================*
  * Backend class
@@ -576,11 +582,19 @@ void BinderLocationBackend::dropGnss()
         gbinder_local_object_drop(m_callbackGnss);
         m_callbackGnss = Q_NULLPTR;
     }
+    if (m_clientGnss) {
+        gbinder_client_unref(m_clientGnss);
+        m_clientGnss = Q_NULLPTR;
+    }
     if (m_remoteGnss) {
         gbinder_remote_object_remove_handler(m_remoteGnss, m_death_id);
         gbinder_remote_object_unref(m_remoteGnss);
         m_death_id = 0;
         m_remoteGnss = Q_NULLPTR;
+    }
+    if (m_clientGnssDebug) {
+        gbinder_client_unref(m_clientGnssDebug);
+        m_clientGnssDebug = Q_NULLPTR;
     }
     if (m_remoteGnssDebug) {
         gbinder_remote_object_unref(m_remoteGnssDebug);
@@ -590,6 +604,10 @@ void BinderLocationBackend::dropGnss()
         gbinder_local_object_drop(m_callbackGnssNi);
         m_callbackGnssNi = Q_NULLPTR;
     }
+    if (m_clientGnssNi) {
+        gbinder_client_unref(m_clientGnssNi);
+        m_clientGnssNi = Q_NULLPTR;
+    }
     if (m_remoteGnssNi) {
         gbinder_remote_object_unref(m_remoteGnssNi);
         m_remoteGnssNi = Q_NULLPTR;
@@ -597,6 +615,10 @@ void BinderLocationBackend::dropGnss()
     if (m_callbackGnssXtra) {
         gbinder_local_object_drop(m_callbackGnssXtra);
         m_callbackGnssXtra = Q_NULLPTR;
+    }
+    if (m_clientGnssXtra) {
+        gbinder_client_unref(m_clientGnssXtra);
+        m_clientGnssXtra = Q_NULLPTR;
     }
     if (m_remoteGnssXtra) {
         gbinder_remote_object_unref(m_remoteGnssXtra);
@@ -606,6 +628,10 @@ void BinderLocationBackend::dropGnss()
         gbinder_local_object_drop(m_callbackAGnss);
         m_callbackAGnss = Q_NULLPTR;
     }
+    if (m_clientAGnss) {
+        gbinder_client_unref(m_clientAGnss);
+        m_clientAGnss = Q_NULLPTR;
+    }
     if (m_remoteAGnss) {
         gbinder_remote_object_unref(m_remoteAGnss);
         m_remoteAGnss = Q_NULLPTR;
@@ -614,9 +640,21 @@ void BinderLocationBackend::dropGnss()
         gbinder_local_object_drop(m_callbackAGnssRil);
         m_callbackAGnssRil = Q_NULLPTR;
     }
+    if (m_clientAGnssRil) {
+        gbinder_client_unref(m_clientAGnssRil);
+        m_clientAGnssRil = Q_NULLPTR;
+    }
     if (m_remoteAGnssRil) {
         gbinder_remote_object_unref(m_remoteAGnssRil);
         m_remoteAGnssRil = Q_NULLPTR;
+    }
+    if (m_sm) {
+        gbinder_servicemanager_unref(m_sm);
+        m_sm = Q_NULLPTR;
+    }
+    if (m_fqname) {
+        g_free(m_fqname);
+        m_fqname = Q_NULLPTR;
     }
 }
 
