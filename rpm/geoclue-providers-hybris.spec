@@ -1,3 +1,11 @@
+Name: geoclue-provider-hybris-hal
+Version: 0.2.22
+Release: 1
+Provides: geoclue-provider-hybris = %{version}-%{release}
+Conflicts: geoclue-provider-hybris <= 0.2.21
+Conflicts: geoclue-provider-hybris-binder
+Obsoletes: geoclue-provider-hybris < %{version}-%{release}
+
 BuildRequires: pkgconfig(libhardware)
 BuildRequires: pkgconfig(android-headers)
 
