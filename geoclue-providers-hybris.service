@@ -1,0 +1,11 @@
+[Unit]
+Description=Geoinformation Service Hybris Provider
+
+[Service]
+Type=dbus
+ExecStart=/usr/libexec/geoclue-hybris
+BusName=org.freedesktop.Geoclue.Providers.Hybris
+
+[Install]
+Alias=dbus-org.freedesktop.Geoclue.Providers.Hybris.service
+

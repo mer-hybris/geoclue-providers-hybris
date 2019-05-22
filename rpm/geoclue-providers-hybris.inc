@@ -37,4 +37,5 @@ make INSTALL_ROOT=%{buildroot} install
 %{_sysconfdir}/dbus-1
 %{_datadir}/dbus-1
 %{_datadir}/geoclue-providers/geoclue-hybris.provider
-
+%{_libdir}/systemd/user/geoclue-providers-hybris.service
+%{_libdir}/systemd/user/dbus-org.freedesktop.Geoclue.Providers.Hybris.service

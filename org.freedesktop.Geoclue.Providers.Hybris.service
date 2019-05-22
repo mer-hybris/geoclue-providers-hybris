@@ -1,3 +1,4 @@
 [D-BUS Service]
 Name=org.freedesktop.Geoclue.Providers.Hybris
-Exec=/usr/libexec/geoclue-hybris
+Exec=/bin/false
+SystemdService=dbus-org.freedesktop.Geoclue.Providers.Hybris.service
