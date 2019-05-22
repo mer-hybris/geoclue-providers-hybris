@@ -5,6 +5,11 @@ Description=Geoinformation Service Hybris Provider
 Type=dbus
 ExecStart=/usr/libexec/geoclue-hybris
 BusName=org.freedesktop.Geoclue.Providers.Hybris
+#Sandboxing
+Capabilities=
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=full
 
 [Install]
 Alias=dbus-org.freedesktop.Geoclue.Providers.Hybris.service
