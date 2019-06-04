@@ -1,6 +1,3 @@
-Name: geoclue-provider-hybris
-Version: 0.0.1
-Release: 1
 Summary: Geoinformation Service Hybris Provider
 Group: System/Libraries
 URL: https://bitbucket.org/jolla/base-geoclue-providers-hybris
