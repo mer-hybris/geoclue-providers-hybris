@@ -78,6 +78,9 @@ public:
     int GetStatus();
 
     // org.freedesktop.Geoclue
+    int GnssDeleteAidingData();
+
+    // org.freedesktop.Geoclue
     void SetOptions(const QVariantMap &options);
 
     // Must match GeocluePositionFields enum

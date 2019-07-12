@@ -10,6 +10,9 @@
     <method name="GetStatus">
       <arg name="status" type="i" direction="out"/>
     </method>
+    <method name="GnssDeleteAidingData">
+      <arg name="status" type="i" direction="out"/>
+    </method>
     <method name="GetProviderInfo">
       <arg name="Name" type="s" direction="out"/>
       <arg name="Description" type="s" direction="out"/>

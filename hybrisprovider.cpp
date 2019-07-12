@@ -352,6 +352,16 @@ int HybrisProvider::GetStatus()
     return m_status;
 }
 
+int HybrisProvider::GnssDeleteAidingData()
+{
+    if (m_backend) {
+        //GPS_DELETE_ALL = 0xFFFF (almanac, ephemeris, position, time and other cache data)
+        m_backend->gnssDeleteAidingData(0xFFFF);
+        return 1;
+    }
+    return 0;
+}
+
 void HybrisProvider::SetOptions(const QVariantMap &options)
 {
     if (!calledFromDBus())
