@@ -56,20 +56,6 @@ const int FixTimeout = 30000;
 const quint32 MinimumInterval = 1000;
 const quint32 PreferredAccuracy = 0;
 const quint32 PreferredInitialFixTime = 0;
-const double KnotsToMps = 0.514444;
-
-const QString LocationSettingsDir = QStringLiteral("/etc/location/");
-const QString LocationSettingsFile = QStringLiteral("/etc/location/location.conf");
-const QString LocationSettingsEnabledKey = QStringLiteral("location/enabled");
-const QString LocationSettingsAllowedDataSourcesGpsKey = QStringLiteral("allowed_data_sources/gps");
-const QString LocationSettingsGpsEnabledKey = QStringLiteral("location/gps/enabled");
-const QString LocationSettingsAgpsEnabledKey = QStringLiteral("location/%1/enabled");
-const QString LocationSettingsAgpsOnlineEnabledKey = QStringLiteral("location/%1/online_enabled");
-const QString LocationSettingsAgpsAgreementAcceptedKey = QStringLiteral("location/%1/agreement_accepted");
-const QString LocationSettingsAgpsProvidersKey = QStringLiteral("location/agps_providers");
-// deprecated keys
-const QString LocationSettingsOldAgpsEnabledKey = QStringLiteral("location/agreement_accepted");
-const QString LocationSettingsOldAgpsAgreementAcceptedKey = QStringLiteral("location/here_agreement_accepted");
 
 const int MaxXtraServers = 3;
 const QString XtraConfigFile = QStringLiteral("/etc/gps_xtra.ini");
@@ -162,7 +148,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(Q_NULLPTR),
     m_ofonoExtModemManager(new QOfonoExtModemManager(this)),
     m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(Q_NULLPTR), m_ntpSocket(Q_NULLPTR),
-    m_agpsEnabled(false), m_agpsOnlineEnabled(false), m_useForcedXtraInject(false), m_xtraUserAgent("")
+    m_agpsEnabled(false), m_agpsOnlineEnabled(false), m_useForcedXtraInject(false)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -213,22 +199,20 @@ HybrisProvider::HybrisProvider(QObject *parent)
         m_idleTimer.start(QuitIdleTime, this);
     }
 
-    QString xtraUserAgentFileName;
     QSettings settings(XtraConfigFile, QSettings::IniFormat);
-    QString xtraServer;
 
     for (int i = 0; i < MaxXtraServers; i++) {
         QString key = QString("xtra/XTRA_SERVER_%1").arg(i);
-        xtraServer = settings.value(key, "").toString();
-        if (xtraServer != "") {
+        QString xtraServer = settings.value(key, QString()).toString();
+        if (!xtraServer.isEmpty()) {
             m_xtraServers.enqueue(xtraServer);
         }
     }
 
     m_useForcedXtraInject = settings.value("xtra/XTRA_FORCE_INJECT", "").toBool();
 
-    xtraUserAgentFileName = settings.value("xtra/XTRA_USERAGENT_FILE", "").toString();
-    if (xtraUserAgentFileName != "") {
+    QString xtraUserAgentFileName = settings.value("xtra/XTRA_USERAGENT_FILE", QString()).toString();
+    if (!xtraUserAgentFileName.isEmpty()) {
         QFile xtraUserAgentFile(xtraUserAgentFileName);
         if (xtraUserAgentFile.open(QIODevice::ReadOnly)) {
             m_xtraUserAgent = xtraUserAgentFile.readLine();
@@ -685,7 +669,7 @@ void HybrisProvider::xtraDownloadRequestSendNext()
     qCDebug(lcGeoclueHybris) << m_xtraServers;
 
     QNetworkRequest network_request(m_xtraServers[m_xtraServerIndex]);
-    if (m_xtraUserAgent != "") {
+    if (!m_xtraUserAgent.isEmpty()) {
         network_request.setRawHeader("User-Agent", m_xtraUserAgent.toUtf8());
     }
     m_xtraDownloadReply = m_manager->get(network_request);
@@ -1052,7 +1036,7 @@ void HybrisProvider::setStatus(HybrisProvider::Status status)
 */
 bool HybrisProvider::positioningEnabled()
 {
-    // update our AGPS enablement states, used for position injection and mode capability.
+    // Hybris AGPS mode doesn't have its own settings at the moment, so enabling if something related is
     m_agpsEnabled = (m_locationSettings->hereAvailable() && m_locationSettings->hereState() == LocationSettings::OnlineAGpsEnabled)
                  || (m_locationSettings->mlsAvailable()  && m_locationSettings->mlsEnabled());
     m_agpsOnlineEnabled = (m_locationSettings->hereAvailable() && m_locationSettings->hereState() == LocationSettings::OnlineAGpsEnabled)

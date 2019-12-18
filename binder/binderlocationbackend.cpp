@@ -148,7 +148,7 @@ HybrisApnIpType fromContextProtocol(const QString &protocol)
         return HYBRIS_APN_IP_INVALID;
 }
 
-static const void *geoclue_binder_gnss_decode_struct1(
+const void *geoclue_binder_gnss_decode_struct1(
     GBinderReader *in,
     guint size)
 {
@@ -226,7 +226,7 @@ void processNmea(gint64 timestamp, const char *nmeaData)
 
 const double MpsToKnots = 1.943844;
 
-static GBinderLocalReply *geoclue_binder_gnss_callback(
+GBinderLocalReply *geoclue_binder_gnss_callback(
     GBinderLocalObject *obj,
     GBinderRemoteRequest *req,
     guint code,
@@ -376,7 +376,7 @@ static GBinderLocalReply *geoclue_binder_gnss_callback(
     return Q_NULLPTR;
 }
 
-static GBinderLocalReply *geoclue_binder_gnss_xtra_callback(
+GBinderLocalReply *geoclue_binder_gnss_xtra_callback(
     GBinderLocalObject *obj,
     GBinderRemoteRequest *req,
     guint code,
@@ -409,7 +409,7 @@ static GBinderLocalReply *geoclue_binder_gnss_xtra_callback(
     return Q_NULLPTR;
 }
 
-static GBinderLocalReply *geoclue_binder_agnss_callback(
+GBinderLocalReply *geoclue_binder_agnss_callback(
     GBinderLocalObject *obj,
     GBinderRemoteRequest *req,
     guint code,
@@ -476,7 +476,7 @@ static GBinderLocalReply *geoclue_binder_agnss_callback(
 }
 
 
-static GBinderLocalReply *geoclue_binder_agnss_ril_callback(
+GBinderLocalReply *geoclue_binder_agnss_ril_callback(
     GBinderLocalObject *obj,
     GBinderRemoteRequest *req,
     guint code,
@@ -513,7 +513,7 @@ static GBinderLocalReply *geoclue_binder_agnss_ril_callback(
 }
 
 
-static GBinderLocalReply *geoclue_binder_gnss_ni_callback(
+GBinderLocalReply *geoclue_binder_gnss_ni_callback(
     GBinderLocalObject *obj,
     GBinderRemoteRequest *req,
     guint code,
@@ -546,7 +546,7 @@ static GBinderLocalReply *geoclue_binder_gnss_ni_callback(
     return Q_NULLPTR;
 }
 
-static void geoclue_binder_gnss_gnss_died(
+void geoclue_binder_gnss_gnss_died(
     GBinderRemoteObject */*obj*/,
     void *user_data)
 {
@@ -652,10 +652,9 @@ void BinderLocationBackend::dropGnss()
         gbinder_servicemanager_unref(m_sm);
         m_sm = Q_NULLPTR;
     }
-    if (m_fqname) {
-        g_free(m_fqname);
-        m_fqname = Q_NULLPTR;
-    }
+
+    g_free(m_fqname);
+    m_fqname = Q_NULLPTR;
 }
 
 bool BinderLocationBackend::isReplySuccess(GBinderRemoteReply *reply)
