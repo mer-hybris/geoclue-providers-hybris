@@ -358,6 +358,13 @@ void HybrisProvider::SetOptions(const QVariantMap &options)
                                        HYBRIS_GNSS_POSITION_RECURRENCE_PERIODIC, updateInterval,
                                        PreferredAccuracy, PreferredInitialFixTime);
     }
+
+    if (options.contains(QStringLiteral("NoCachedAidingData"))
+            && options.value(QStringLiteral("NoCachedAidingData")).toBool()
+            && m_backend) {
+        //GPS_DELETE_ALL = 0xFFFF (almanac, ephemeris, position, time and other cache data)
+        m_backend->gnssDeleteAidingData(0xFFFF);
+    }
 }
 
 int HybrisProvider::GetPosition(int &timestamp, double &latitude, double &longitude,
