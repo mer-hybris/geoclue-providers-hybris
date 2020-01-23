@@ -503,7 +503,9 @@ bool HalLocationBackend::gnssInjectTime(HybrisGnssUtcTime timeMs, int64_t timeRe
 
 void HalLocationBackend::gnssDeleteAidingData(HybrisGnssAidingData aidingDataFlags)
 {
-    Q_UNUSED(aidingDataFlags)
+    if (m_gps) {
+        m_gps->delete_aiding_data(aidingDataFlags);
+    }
 }
 
 bool HalLocationBackend::gnssSetPositionMode(HybrisGnssPositionMode mode, HybrisGnssPositionRecurrence recurrence,
