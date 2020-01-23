@@ -1,5 +1,5 @@
 Name: geoclue-provider-hybris-binder
-Version: 0.2.22
+Version: 0.2.24
 Release: 1
 Provides: geoclue-provider-hybris = %{version}-%{release}
 Conflicts: geoclue-provider-hybris <= 0.2.21
