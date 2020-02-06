@@ -33,6 +33,12 @@ session_dbus_service.path = /usr/share/dbus-1/services
 system_dbus_conf.files = com.jollamobile.gps.conf
 system_dbus_conf.path = /etc/dbus-1/system.d
 
+systemd_dbus_service.files = geoclue-providers-hybris.service
+systemd_dbus_service.path = /usr/lib/systemd/user
+
+systemd_dbus_service_symlink.path = .
+systemd_dbus_service_symlink.commands = ln -s geoclue-providers-hybris.service ${INSTALL_ROOT}/usr/lib/systemd/user/dbus-org.freedesktop.Geoclue.Providers.Hybris.service
+
 geoclue_provider.files = geoclue-hybris.provider
 geoclue_provider.path = /usr/share/geoclue-providers
 
@@ -49,7 +55,8 @@ OTHER_FILES = \
     $${session_dbus_service.files} \
     $${system_dbus_service.files} \
     $${system_dbus_conf.files} \
+    $${systemd_dbus_service.files} \
     $${geoclue_provider.files} \
     rpm/geoclue-providers-hybris.spec
 
-INSTALLS += target session_dbus_service system_dbus_conf geoclue_provider
+INSTALLS += target session_dbus_service system_dbus_conf geoclue_provider systemd_dbus_service systemd_dbus_service_symlink
