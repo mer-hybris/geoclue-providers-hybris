@@ -125,6 +125,9 @@ protected:
     void timerEvent(QTimerEvent *event);
 
 private slots:
+    bool capabilitiesSupported(quint32 capabilities);
+    void setCapabilities(quint32 capabilities);
+
     void setLocation(const Location &location);
     void setSatellite(const QList<SatelliteInfo> &satellites, const QList<int> &used);
     void serviceUnregistered(const QString &service);
@@ -245,6 +248,8 @@ private:
 
     QString m_suplHost;
     int m_suplPort;
+
+    quint32 m_capabilities;
 };
 
 extern HybrisProvider *staticProvider;

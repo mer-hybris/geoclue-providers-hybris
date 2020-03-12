@@ -350,6 +350,8 @@ GBinderLocalReply *geoclue_binder_gnss_callback(
             guint32 capabilities;
             if (gbinder_reader_read_uint32(&reader, &capabilities)) {
                 qCDebug(lcGeoclueHybris) << "capabilities" << showbase << hex << capabilities;
+                QMetaObject::invokeMethod(staticProvider, "setCapabilities", Qt::QueuedConnection,
+                                          Q_ARG(quint32, capabilities));
             }
             }
             break;
