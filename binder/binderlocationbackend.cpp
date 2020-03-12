@@ -1156,6 +1156,33 @@ bool BinderLocationBackend::aGnssDataConnOpen(const QByteArray &apn, const QStri
     return ret;
 }
 
+int BinderLocationBackend::aGnssSetServer(HybrisAGnssType type, const char* hostname, int port)
+{
+    int status = 0;
+    bool ret = false;
+    GBinderLocalRequest *req;
+    GBinderRemoteReply *reply;
+    GBinderWriter writer;
+
+    req = gbinder_client_new_request(m_clientAGnss);
+
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_int32(&writer, type);
+    gbinder_writer_append_hidl_string(&writer, hostname);
+    gbinder_writer_append_int32(&writer, port);
+    reply = gbinder_client_transact_sync_reply(m_clientAGnss,
+        AGNSS_SET_SERVER, req, &status);
+
+    if (!status) {
+        ret = isReplySuccess(reply);
+    }
+
+    gbinder_local_request_unref(req);
+    gbinder_remote_reply_unref(reply);
+
+    return ret;
+}
+
 // AGnssRil
 void BinderLocationBackend::aGnssRilInit()
 {

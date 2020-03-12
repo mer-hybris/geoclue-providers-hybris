@@ -242,6 +242,9 @@ private:
     bool m_useForcedXtraInject;
     QString m_xtraUserAgent;
     double m_magneticVariation;
+
+    QString m_suplHost;
+    int m_suplPort;
 };
 
 extern HybrisProvider *staticProvider;

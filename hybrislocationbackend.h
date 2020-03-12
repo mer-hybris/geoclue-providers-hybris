@@ -136,6 +136,7 @@ public:
     virtual bool aGnssDataConnClosed() = 0;
     virtual bool aGnssDataConnFailed() = 0;
     virtual bool aGnssDataConnOpen(const QByteArray &apn, const QString &protocol) = 0;
+    virtual int aGnssSetServer(HybrisAGnssType type, const char* hostname, int port) = 0;
 
     // AGnssRil
     virtual void aGnssRilInit() = 0;

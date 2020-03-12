@@ -148,7 +148,8 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(Q_NULLPTR),
     m_ofonoExtModemManager(new QOfonoExtModemManager(this)),
     m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(Q_NULLPTR), m_ntpSocket(Q_NULLPTR),
-    m_agpsEnabled(false), m_agpsOnlineEnabled(false), m_useForcedNtpInject(false), m_useForcedXtraInject(false)
+    m_agpsEnabled(false), m_agpsOnlineEnabled(false), m_useForcedNtpInject(false), m_useForcedXtraInject(false),
+    m_suplPort(0)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -221,7 +222,10 @@ HybrisProvider::HybrisProvider(QObject *parent)
 
     m_useForcedNtpInject = settings.value("ntp/NTP_FORCE_INJECT", "").toBool();
 
-    if (m_xtraServers.isEmpty()) {
+    m_suplHost = settings.value("supl/SUPL_HOST", QString()).toString();
+    m_suplPort = settings.value("supl/SUPL_PORT", "").toInt();
+
+    if (m_xtraServers.isEmpty() || m_suplHost.isEmpty() || m_suplPort == 0) {
         loadDefaultsFromConfigurationFile();
     }
 
@@ -237,6 +241,10 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_backend->aGnssRilInit();
     m_backend->gnssXtraInit();
     m_backend->gnssDebugInit();
+
+    // Set SUPL server if provided
+    if (!m_suplHost.isEmpty() && m_suplPort != 0)
+        m_backend->aGnssSetServer(HYBRIS_AGNSS_TYPE_SUPL, m_suplHost.toLatin1().constData(), m_suplPort);
 }
 
 HybrisProvider::~HybrisProvider()
@@ -282,6 +290,12 @@ void HybrisProvider::loadDefaultsFromConfigurationFile()
         if (parseXtraServers) {
             if (key == "XTRA_SERVER_1" || key == "XTRA_SERVER_2" || key == "XTRA_SERVER_3")
                 m_xtraServers.enqueue(QUrl::fromEncoded(split.at(1).trimmed()));
+        }
+        if (m_suplHost.isEmpty() && key == "SUPL_HOST") {
+            m_suplHost = split.at(1).trimmed();
+        }
+        if (m_suplPort == 0 && key == "SUPL_PORT") {
+            m_suplPort = split.at(1).trimmed().toInt();
         }
     }
 }
