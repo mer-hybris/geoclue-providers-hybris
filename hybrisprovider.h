@@ -156,6 +156,8 @@ private slots:
     void cellularConnected(bool connected);
 
 private:
+    void loadDefaultsFromConfigurationFile();
+
     void emitLocationChanged();
     void emitSatelliteChanged();
     void startPositioningIfNeeded();
