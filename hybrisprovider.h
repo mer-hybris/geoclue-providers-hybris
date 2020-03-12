@@ -238,6 +238,7 @@ private:
 
     bool m_agpsEnabled;
     bool m_agpsOnlineEnabled;
+    bool m_useForcedNtpInject;
     bool m_useForcedXtraInject;
     QString m_xtraUserAgent;
     double m_magneticVariation;

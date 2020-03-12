@@ -148,7 +148,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(Q_NULLPTR),
     m_ofonoExtModemManager(new QOfonoExtModemManager(this)),
     m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(Q_NULLPTR), m_ntpSocket(Q_NULLPTR),
-    m_agpsEnabled(false), m_agpsOnlineEnabled(false), m_useForcedXtraInject(false)
+    m_agpsEnabled(false), m_agpsOnlineEnabled(false), m_useForcedNtpInject(false), m_useForcedXtraInject(false)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -218,6 +218,8 @@ HybrisProvider::HybrisProvider(QObject *parent)
             m_xtraUserAgent = xtraUserAgentFile.readLine();
         }
     }
+
+    m_useForcedNtpInject = settings.value("ntp/NTP_FORCE_INJECT", "").toBool();
 
     if (m_xtraServers.isEmpty()) {
         loadDefaultsFromConfigurationFile();
@@ -879,9 +881,12 @@ void HybrisProvider::technologiesChanged()
 
 void HybrisProvider::stateChanged(const QString &state)
 {
-    if (state == "online") {
-        if (m_gpsStarted && m_useForcedXtraInject) {
+    if (state == "online" && m_gpsStarted) {
+        if (m_useForcedXtraInject) {
             gnssXtraDownloadRequest();
+        }
+        if (m_useForcedNtpInject) {
+            injectUtcTime();
         }
     }
 }
@@ -1013,8 +1018,13 @@ void HybrisProvider::startPositioningIfNeeded()
 
     m_gpsStarted = true;
 
-    if (m_useForcedXtraInject && m_networkManager->state() == "online") {
-        gnssXtraDownloadRequest();
+    if (m_networkManager->state() == "online") {
+        if (m_useForcedXtraInject) {
+            gnssXtraDownloadRequest();
+        }
+        if (m_useForcedNtpInject) {
+            injectUtcTime();
+        }
     }
 }
 
