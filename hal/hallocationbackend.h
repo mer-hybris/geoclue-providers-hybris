@@ -64,6 +64,7 @@ public:
     bool aGnssDataConnClosed();
     bool aGnssDataConnFailed();
     bool aGnssDataConnOpen(const QByteArray &apn, const QString &protocol);
+    int aGnssSetServer(HybrisAGnssType type, const char* hostname, int port);
 
     // AGnssRil
     void aGnssRilInit();

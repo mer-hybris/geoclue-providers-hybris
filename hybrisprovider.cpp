@@ -148,7 +148,8 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_networkManager(new NetworkManager(this)), m_cellularTechnology(Q_NULLPTR),
     m_ofonoExtModemManager(new QOfonoExtModemManager(this)),
     m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(Q_NULLPTR), m_ntpSocket(Q_NULLPTR),
-    m_agpsEnabled(false), m_agpsOnlineEnabled(false), m_useForcedXtraInject(false)
+    m_agpsEnabled(false), m_agpsOnlineEnabled(false), m_useForcedNtpInject(false), m_useForcedXtraInject(false),
+    m_suplPort(0)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -219,24 +220,13 @@ HybrisProvider::HybrisProvider(QObject *parent)
         }
     }
 
-    if (m_xtraServers.isEmpty()) {
-        QFile gpsConf(QStringLiteral("/system/etc/gps.conf"));
-        if (gpsConf.open(QIODevice::ReadOnly)) {
+    m_useForcedNtpInject = settings.value("ntp/NTP_FORCE_INJECT", "").toBool();
 
-            while (!gpsConf.atEnd()) {
-                const QByteArray line = gpsConf.readLine().trimmed();
-                if (line.startsWith('#'))
-                    continue;
+    m_suplHost = settings.value("supl/SUPL_HOST", QString()).toString();
+    m_suplPort = settings.value("supl/SUPL_PORT", "").toInt();
 
-                const QList<QByteArray> split = line.split('=');
-                if (split.length() != 2)
-                    continue;
-
-                const QByteArray key = split.at(0).trimmed();
-                if (key == "XTRA_SERVER_1" || key == "XTRA_SERVER_2" || key == "XTRA_SERVER_3")
-                    m_xtraServers.enqueue(QUrl::fromEncoded(split.at(1).trimmed()));
-            }
-        }
+    if (m_xtraServers.isEmpty() || m_suplHost.isEmpty() || m_suplPort == 0) {
+        loadDefaultsFromConfigurationFile();
     }
 
     m_backend = getLocationBackend();
@@ -251,6 +241,10 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_backend->aGnssRilInit();
     m_backend->gnssXtraInit();
     m_backend->gnssDebugInit();
+
+    // Set SUPL server if provided
+    if (!m_suplHost.isEmpty() && m_suplPort != 0)
+        m_backend->aGnssSetServer(HYBRIS_AGNSS_TYPE_SUPL, m_suplHost.toLatin1().constData(), m_suplPort);
 }
 
 HybrisProvider::~HybrisProvider()
@@ -262,6 +256,48 @@ HybrisProvider::~HybrisProvider()
 
     if (staticProvider == this)
         staticProvider = 0;
+}
+
+void HybrisProvider::loadDefaultsFromConfigurationFile()
+{
+    QFile gpsConf;
+    bool parseXtraServers = false;
+    const char *paths[] = {"/vendor/etc/gps.conf", "/system/etc/gps.conf", NULL};
+    int i = 0;
+    while (paths[i] != NULL) {
+        gpsConf.setFileName(paths[i]);
+        if (gpsConf.open(QIODevice::ReadOnly)) {
+            break;
+        }
+    }
+    if (!gpsConf.isOpen()) {
+        return;
+    }
+    if (m_xtraServers.isEmpty()) {
+        parseXtraServers = true;
+    }
+
+    while (!gpsConf.atEnd()) {
+        const QByteArray line = gpsConf.readLine().trimmed();
+        if (line.startsWith('#'))
+            continue;
+
+        const QList<QByteArray> split = line.split('=');
+        if (split.length() != 2)
+            continue;
+
+        const QByteArray key = split.at(0).trimmed();
+        if (parseXtraServers) {
+            if (key == "XTRA_SERVER_1" || key == "XTRA_SERVER_2" || key == "XTRA_SERVER_3")
+                m_xtraServers.enqueue(QUrl::fromEncoded(split.at(1).trimmed()));
+        }
+        if (m_suplHost.isEmpty() && key == "SUPL_HOST") {
+            m_suplHost = split.at(1).trimmed();
+        }
+        if (m_suplPort == 0 && key == "SUPL_PORT") {
+            m_suplPort = split.at(1).trimmed().toInt();
+        }
+    }
 }
 
 void HybrisProvider::setLocationSettings(LocationSettings *settings)
@@ -859,9 +895,12 @@ void HybrisProvider::technologiesChanged()
 
 void HybrisProvider::stateChanged(const QString &state)
 {
-    if (state == "online") {
-        if (m_gpsStarted && m_useForcedXtraInject) {
+    if (state == "online" && m_gpsStarted) {
+        if (m_useForcedXtraInject) {
             gnssXtraDownloadRequest();
+        }
+        if (m_useForcedNtpInject) {
+            injectUtcTime();
         }
     }
 }
@@ -993,8 +1032,13 @@ void HybrisProvider::startPositioningIfNeeded()
 
     m_gpsStarted = true;
 
-    if (m_useForcedXtraInject && m_networkManager->state() == "online") {
-        gnssXtraDownloadRequest();
+    if (m_networkManager->state() == "online") {
+        if (m_useForcedXtraInject) {
+            gnssXtraDownloadRequest();
+        }
+        if (m_useForcedNtpInject) {
+            injectUtcTime();
+        }
     }
 }
 

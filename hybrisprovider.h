@@ -156,6 +156,8 @@ private slots:
     void cellularConnected(bool connected);
 
 private:
+    void loadDefaultsFromConfigurationFile();
+
     void emitLocationChanged();
     void emitSatelliteChanged();
     void startPositioningIfNeeded();
@@ -236,9 +238,13 @@ private:
 
     bool m_agpsEnabled;
     bool m_agpsOnlineEnabled;
+    bool m_useForcedNtpInject;
     bool m_useForcedXtraInject;
     QString m_xtraUserAgent;
     double m_magneticVariation;
+
+    QString m_suplHost;
+    int m_suplPort;
 };
 
 extern HybrisProvider *staticProvider;
