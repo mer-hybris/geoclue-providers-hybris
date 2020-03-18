@@ -1,7 +1,6 @@
 Summary: Geoinformation Service Hybris Provider
-Group: System/Libraries
-URL: https://bitbucket.org/jolla/base-geoclue-providers-hybris
-License: LGPLv2.1
+URL: https://github.com/mer-hybris/geoclue-providers-hybris
+License: LGPLv2
 Source: %{name}-%{version}.tar.gz
 BuildRequires: pkgconfig(Qt5Core)
 BuildRequires: pkgconfig(Qt5DBus)
