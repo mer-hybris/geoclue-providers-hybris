@@ -269,6 +269,7 @@ void HybrisProvider::loadDefaultsFromConfigurationFile()
         if (gpsConf.open(QIODevice::ReadOnly)) {
             break;
         }
+        ++i;
     }
     if (!gpsConf.isOpen()) {
         return;
