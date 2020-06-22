@@ -9,6 +9,7 @@ BuildRequires: pkgconfig(connman-qt5) >= 1.0.68
 BuildRequires: pkgconfig(qofono-qt5)
 BuildRequires: pkgconfig(qofonoext)
 BuildRequires: pkgconfig(systemsettings) >= 0.5.5
+BuildRequires: systemd
 Requires: connectionagent-qt5 >= 0.9.20
 
 Source100: geoclue-providers-hybris.inc
@@ -36,5 +37,5 @@ make INSTALL_ROOT=%{buildroot} install
 %{_sysconfdir}/dbus-1
 %{_datadir}/dbus-1
 %{_datadir}/geoclue-providers/geoclue-hybris.provider
-%{_libdir}/systemd/user/geoclue-providers-hybris.service
-%{_libdir}/systemd/user/dbus-org.freedesktop.Geoclue.Providers.Hybris.service
+%{_userunitdir}/geoclue-providers-hybris.service
+%{_userunitdir}/dbus-org.freedesktop.Geoclue.Providers.Hybris.service
