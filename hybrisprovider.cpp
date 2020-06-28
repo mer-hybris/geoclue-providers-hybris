@@ -48,6 +48,12 @@ Q_LOGGING_CATEGORY(lcGeoclueHybrisPosition, "geoclue.provider.hybris.position")
 
 HybrisProvider *staticProvider = Q_NULLPTR;
 
+// Some older devices have the GPS week number rollover bug
+// which breaks timestamps so workaround it using a constant offset
+// of 1024 weeks if timestamp is too small
+const HybrisGnssUtcTime GnssWeekRolloverTimestamp = 1554595200000;
+const HybrisGnssUtcTime GnssWeekRolloverTimestampOffset = 619315200000;
+
 namespace
 {
 
@@ -501,6 +507,11 @@ void HybrisProvider::setLocation(const Location &location)
     }
 
     m_currentLocation = location;
+
+    if (m_currentLocation.timestamp() != 0 && m_currentLocation.timestamp() < GnssWeekRolloverTimestamp) {
+        m_currentLocation.setTimestamp(m_currentLocation.timestamp() + GnssWeekRolloverTimestampOffset);
+    }
+
     emitLocationChanged();
 }
 
