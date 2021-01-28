@@ -789,12 +789,7 @@ bool BinderLocationBackend::gnssStop()
 void BinderLocationBackend::gnssCleanup()
 {
     if (m_clientGnss) {
-        const int status = gbinder_client_transact_sync_oneway(m_clientGnss,
-            GNSS_CLEANUP, Q_NULLPTR);
-
-        if (status) {
-            qWarning("Failed to cleanup\n");
-        }
+        gbinder_client_transact(m_clientGnss, GNSS_CLEANUP, 0, NULL, NULL, NULL, NULL);
     }
 }
 
@@ -869,8 +864,8 @@ void BinderLocationBackend::gnssDeleteAidingData(HybrisGnssAidingData aidingData
 
         req = gbinder_client_new_request(m_clientGnss);
         gbinder_local_request_append_int32(req, aidingDataFlags);
-        gbinder_client_transact_sync_oneway(m_clientGnss,
-            GNSS_DELETE_AIDING_DATA, req);
+        gbinder_client_transact(m_clientGnss, GNSS_DELETE_AIDING_DATA, 
+                                0, req, NULL, NULL, NULL);
 
         gbinder_local_request_unref(req);
     }
