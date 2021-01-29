@@ -231,6 +231,8 @@ void nmeaCallback(GpsUtcTime timestamp, const char *nmeaData, int length)
 void setCapabilitiesCallback(uint32_t capabilities)
 {
     qCDebug(lcGeoclueHybris) << "capabilities" << showbase << hex << capabilities;
+    QMetaObject::invokeMethod(staticProvider, "setCapabilities", Qt::QueuedConnection,
+                              Q_ARG(quint32, capabilities));
 }
 
 void acquireWakelockCallback()
