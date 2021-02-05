@@ -254,7 +254,7 @@ pthread_t createThreadCallback(const char *name, void (*start)(void *), void *ar
 
 void requestUtcTimeCallback()
 {
-    qCDebug(lcGeoclueHybris);
+    qCDebug(lcGeoclueHybris) << "GNSS request UTC time";
 
     QMetaObject::invokeMethod(staticProvider, "injectUtcTime", Qt::QueuedConnection);
 }
@@ -263,7 +263,7 @@ void requestUtcTimeCallback()
 void gnssSetSystemInfoCallback(const GnssSystemInfo *info)
 {
     Q_UNUSED(info)
-    qCDebug(lcGeoclueHybris);
+    qCDebug(lcGeoclueHybris) << "GNSS set system info";
 }
 #endif
 
@@ -299,19 +299,19 @@ void agpsStatusCallback(AGpsStatus *status)
 void gpsNiNotifyCallback(GpsNiNotification *notification)
 {
     Q_UNUSED(notification)
-    qCDebug(lcGeoclueHybris);
+    qCDebug(lcGeoclueHybris) << "GNSS NI notify";
 }
 
 void agpsRilRequestSetId(uint32_t flags)
 {
     Q_UNUSED(flags)
-    qCDebug(lcGeoclueHybris) << "flags" << showbase << hex << flags;
+    qCDebug(lcGeoclueHybris) << "AGNSS RIL request set ID flags" << showbase << hex << flags;
 }
 
 void agpsRilRequestRefLoc(uint32_t flags)
 {
     Q_UNUSED(flags)
-    qCDebug(lcGeoclueHybris) << "flags" << showbase << hex << flags;
+    qCDebug(lcGeoclueHybris) << "AGNSS RIL request ref location flags" << showbase << hex << flags;
 }
 
 void gnssXtraDownloadRequest()
@@ -411,17 +411,17 @@ bool HalLocationBackend::gnssInit()
 
     int error = hw_get_module(GPS_HARDWARE_MODULE_ID, &hwModule);
     if (error) {
-        qWarning("Android GPS interface not found, error %d\n", error);
+        qWarning("Android GPS interface not found, error %d", error);
         return false;
     }
 
-    qWarning("Android GPS hardware module \"%s\" \"%s\" %u.%u\n", hwModule->id, hwModule->name,
+    qWarning("Android GPS hardware module \"%s\" \"%s\" %u.%u", hwModule->id, hwModule->name,
              hwModule->module_api_version, hwModule->hal_api_version);
 
     error = hwModule->methods->open(hwModule, GPS_HARDWARE_MODULE_ID,
                                     reinterpret_cast<hw_device_t **>(&m_gpsDevice));
     if (error) {
-        qWarning("Failed to open GPS device, error %d\n", error);
+        qWarning("Failed to open GPS device, error %d", error);
         return false;
     }
 
@@ -429,11 +429,11 @@ bool HalLocationBackend::gnssInit()
     if (!m_gps)
         return false;
 
-    qWarning("Initialising GPS interface\n");
+    qWarning("Initialising GPS interface");
 
     error = m_gps->init(&gpsCallbacks);
     if (error) {
-        qWarning("Failed to initialise GPS interface, error %d\n", error);
+        qWarning("Failed to initialise GPS interface, error %d", error);
         return false;
     }
 
@@ -445,7 +445,7 @@ bool HalLocationBackend::gnssStart()
     if (m_gps) {
         int error = m_gps->start();
         if (error) {
-            qWarning("Failed to start positioning, error %d\n", error);
+            qWarning("Failed to start positioning, error %d", error);
             return false;
         }
         return true;
@@ -458,7 +458,7 @@ bool HalLocationBackend::gnssStop()
     if (m_gps) {
         int error = m_gps->stop();
         if (error) {
-            qWarning("Failed to stop positioning, error %d\n", error);
+            qWarning("Failed to stop positioning, error %d", error);
             return false;
         }
         return true;
@@ -480,7 +480,7 @@ bool HalLocationBackend::gnssInjectLocation(double latitudeDegrees, double longi
     if (m_gps) {
         int error = m_gps->inject_location(latitudeDegrees, longitudeDegrees, accuracyMeters);
         if (error) {
-            qWarning("Failed to inject location, error %d\n", error);
+            qWarning("Failed to inject location, error %d", error);
             return false;
         }
         return true;
@@ -493,7 +493,7 @@ bool HalLocationBackend::gnssInjectTime(HybrisGnssUtcTime timeMs, int64_t timeRe
     if (m_gps) {
         int error = m_gps->inject_time(timeMs, timeReferenceMs, uncertaintyMs);
         if (error) {
-            qWarning("Failed to inject time, error %d\n", error);
+            qWarning("Failed to inject time, error %d", error);
             return false;
         }
         return true;
@@ -515,7 +515,7 @@ bool HalLocationBackend::gnssSetPositionMode(HybrisGnssPositionMode mode, Hybris
     int error = m_gps->set_position_mode(mode, recurrence, minIntervalMs,
                                          preferredAccuracyMeters, preferredTimeMs);
     if (error) {
-        qWarning("While updating the updateInterval, failed to set position mode, error %d\n", error);
+        qWarning("While updating the updateInterval, failed to set position mode, error %d", error);
         return false;
     }
     return true;
@@ -532,7 +532,7 @@ void HalLocationBackend::gnssNiInit()
 {
     m_gpsni = static_cast<const GpsNiInterface *>(m_gps->get_extension(GPS_NI_INTERFACE));
     if (m_gpsni) {
-        qWarning("Initialising GPS NI Interface\n");
+        qWarning("Initialising GPS NI Interface");
         m_gpsni->init(&gpsNiCallbacks);
     }
 }
@@ -547,10 +547,10 @@ void HalLocationBackend::gnssXtraInit()
 {
     m_xtra = static_cast<const GpsXtraInterface *>(m_gps->get_extension(GPS_XTRA_INTERFACE));
     if (m_xtra) {
-        qWarning("Initialising GPS Xtra Interface\n");
+        qWarning("Initialising GPS Xtra Interface");
         int error = m_xtra->init(&gpsXtraCallbacks.callbacks);
         if (error)
-            qWarning("GPS Xtra Interface init failed, error %d\n", error);
+            qWarning("GPS Xtra Interface init failed, error %d", error);
     }
 }
 
@@ -567,7 +567,7 @@ void HalLocationBackend::aGnssInit()
 {
     m_agps = static_cast<const AGpsInterface *>(m_gps->get_extension(AGPS_INTERFACE));
     if (m_agps) {
-        qWarning("Initialising AGPS Interface\n");
+        qWarning("Initialising AGPS Interface");
         m_agps->init(&agpsCallbacks);
     }
 }
@@ -626,7 +626,7 @@ void HalLocationBackend::aGnssRilInit()
 {
     m_agpsril = static_cast<const AGpsRilInterface *>(m_gps->get_extension(AGPS_RIL_INTERFACE));
     if (m_agpsril) {
-        qWarning("Initialising AGPS RIL Interface\n");
+        qWarning("Initialising AGPS RIL Interface");
         m_agpsril->init(&agpsRilCallbacks);
     }
 }

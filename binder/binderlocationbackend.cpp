@@ -364,13 +364,13 @@ GBinderLocalReply *geoclue_binder_gnss_callback(
             qCDebug(lcGeoclueHybris) << "GNSS set system info";
             break;
         default:
-            qWarning("Failed to decode callback %u\n", code);
+            qWarning("Failed to decode callback %u", code);
             break;
         }
         *status = GBINDER_STATUS_OK;
         return gbinder_local_reply_append_int32(gbinder_local_object_new_reply(obj), 0);
     } else {
-        qWarning("Unknown interface %s and code %u\n", iface, code);
+        qWarning("Unknown interface %s and code %u", iface, code);
         *status = GBINDER_STATUS_FAILED;
     }
     return Q_NULLPTR;
@@ -397,13 +397,13 @@ GBinderLocalReply *geoclue_binder_gnss_xtra_callback(
             QMetaObject::invokeMethod(staticProvider, "xtraDownloadRequest", Qt::QueuedConnection);
             break;
         default:
-            qWarning("Failed to decode callback %u\n", code);
+            qWarning("Failed to decode callback %u", code);
             break;
         }
         *status = GBINDER_STATUS_OK;
         return gbinder_local_reply_append_int32(gbinder_local_object_new_reply(obj), 0);
     } else {
-        qWarning("Unknown interface %s and code %u\n", iface, code);
+        qWarning("Unknown interface %s and code %u", iface, code);
         *status = GBINDER_STATUS_FAILED;
     }
     return Q_NULLPTR;
@@ -463,13 +463,13 @@ GBinderLocalReply *geoclue_binder_agnss_callback(
             }
             break;
         default:
-            qWarning("Failed to decode callback %u\n", code);
+            qWarning("Failed to decode callback %u", code);
             break;
         }
         *status = GBINDER_STATUS_OK;
         return gbinder_local_reply_append_int32(gbinder_local_object_new_reply(obj), 0);
     } else {
-        qWarning("Unknown interface %s and code %u\n", iface, code);
+        qWarning("Unknown interface %s and code %u", iface, code);
         *status = GBINDER_STATUS_FAILED;
     }
     return Q_NULLPTR;
@@ -500,13 +500,13 @@ GBinderLocalReply *geoclue_binder_agnss_ril_callback(
             qCDebug(lcGeoclueHybris) << "AGNSS RIL request ref location";
             break;
         default:
-            qWarning("Failed to decode callback %u\n", code);
+            qWarning("Failed to decode callback %u", code);
             break;
         }
         *status = GBINDER_STATUS_OK;
         return gbinder_local_reply_append_int32(gbinder_local_object_new_reply(obj), 0);
     } else {
-        qWarning("Unknown interface %s and code %u\n", iface, code);
+        qWarning("Unknown interface %s and code %u", iface, code);
         *status = GBINDER_STATUS_FAILED;
     }
     return Q_NULLPTR;
@@ -534,13 +534,13 @@ GBinderLocalReply *geoclue_binder_gnss_ni_callback(
             qCDebug(lcGeoclueHybris) << "GNSS NI notify";
             break;
         default:
-            qWarning("Failed to decode callback %u\n", code);
+            qWarning("Failed to decode callback %u", code);
             break;
         }
         *status = GBINDER_STATUS_OK;
         return gbinder_local_reply_append_int32(gbinder_local_object_new_reply(obj), 0);
     } else {
-        qWarning("Unknown interface %s and code %u\n", iface, code);
+        qWarning("Unknown interface %s and code %u", iface, code);
         *status = GBINDER_STATUS_FAILED;
     }
     return Q_NULLPTR;
@@ -681,7 +681,7 @@ GBinderRemoteObject *BinderLocationBackend::getExtensionObject(GBinderRemoteRepl
     gbinder_remote_reply_init_reader(reply, &reader);
 
     if (!gbinder_reader_read_int32(&reader, &status) || status != 0) {
-        qWarning("Failed to get extension object %d\n", status);
+        qWarning("Failed to get extension object %d", status);
         return Q_NULLPTR;
     }
 
@@ -693,7 +693,7 @@ bool BinderLocationBackend::gnssInit()
 {
     bool ret = false;
 
-    qWarning("Initialising GNSS interface\n");
+    qWarning("Initialising GNSS interface");
 
     m_sm = gbinder_servicemanager_new(GNSS_BINDER_DEFAULT_DEV);
     if (m_sm) {
@@ -733,7 +733,7 @@ bool BinderLocationBackend::gnssInit()
     }
 
     if (!ret) {
-        qWarning("Failed to initialise GNSS interface\n");
+        qWarning("Failed to initialise GNSS interface");
     }
     return ret;
 }
@@ -757,7 +757,7 @@ bool BinderLocationBackend::gnssStart()
     }
 
     if (!ret) {
-        qWarning("Failed to start positioning\n");
+        qWarning("Failed to start positioning");
     }
     return ret;
 }
@@ -781,7 +781,7 @@ bool BinderLocationBackend::gnssStop()
     }
 
     if (!ret) {
-        qWarning("Failed to stop positioning\n");
+        qWarning("Failed to stop positioning");
     }
     return ret;
 }
@@ -816,7 +816,7 @@ bool BinderLocationBackend::gnssInjectLocation(double latitudeDegrees, double lo
             ret = isReplySuccess(reply);
         }
         if (!ret) {
-            qWarning("Failed to inject location\n");
+            qWarning("Failed to inject location");
         }
 
         gbinder_local_request_unref(req);
@@ -849,7 +849,7 @@ bool BinderLocationBackend::gnssInjectTime(HybrisGnssUtcTime timeMs, int64_t tim
         }
 
         if (!ret) {
-            qWarning("Failed to inject time\n");
+            qWarning("Failed to inject time");
         }
         gbinder_local_request_unref(req);
         gbinder_remote_reply_unref(reply);
@@ -898,7 +898,7 @@ bool BinderLocationBackend::gnssSetPositionMode(HybrisGnssPositionMode mode, Hyb
         }
 
         if (!ret) {
-            qWarning("GNSS set position mode failed\n");
+            qWarning("GNSS set position mode failed");
         }
         gbinder_local_request_unref(req);
         gbinder_remote_reply_unref(reply);
@@ -918,7 +918,7 @@ void BinderLocationBackend::gnssDebugInit()
     if (!status) {
         m_remoteGnssDebug = getExtensionObject(reply);
         if (m_remoteGnssDebug) {
-            qWarning("Initialising GNSS Debug interface\n");
+            qWarning("Initialising GNSS Debug interface");
             m_clientGnssDebug = gbinder_client_new(m_remoteGnssDebug, GNSS_DEBUG_REMOTE);
         }
     }
@@ -938,7 +938,7 @@ void BinderLocationBackend::gnssNiInit()
         m_remoteGnssNi = getExtensionObject(reply);
 
         if (m_remoteGnssNi) {
-            qWarning("Initialising GNSS NI interface\n");
+            qWarning("Initialising GNSS NI interface");
             GBinderLocalRequest *req;
             m_clientGnssNi = gbinder_client_new(m_remoteGnssNi, GNSS_NI_REMOTE);
             m_callbackGnssNi = gbinder_servicemanager_new_local_object
@@ -954,7 +954,7 @@ void BinderLocationBackend::gnssNiInit()
 
             if (!status) {
                 if (!gbinder_remote_reply_read_int32(reply, &status) || status != 0) {
-                    qWarning("Initialising GNSS NI interface failed %d\n", status);
+                    qWarning("Initialising GNSS NI interface failed %d", status);
                 }
             }
             gbinder_local_request_unref(req);
@@ -981,7 +981,7 @@ void BinderLocationBackend::gnssNiRespond(int32_t notifId, HybrisGnssUserRespons
 
         if (!status) {
             if (!gbinder_remote_reply_read_int32(reply, &status) || status != 0) {
-                qWarning("GNSS NI respond failed %d\n", status);
+                qWarning("GNSS NI respond failed %d", status);
             }
         }
 
@@ -1003,7 +1003,7 @@ void BinderLocationBackend::gnssXtraInit()
         m_remoteGnssXtra = getExtensionObject(reply);
 
         if (m_remoteGnssXtra) {
-            qWarning("Initialising GNSS Xtra interface\n");
+            qWarning("Initialising GNSS Xtra interface");
             GBinderLocalRequest *req;
             m_clientGnssXtra = gbinder_client_new(m_remoteGnssXtra, GNSS_XTRA_REMOTE);
             m_callbackGnssXtra = gbinder_servicemanager_new_local_object
@@ -1018,7 +1018,7 @@ void BinderLocationBackend::gnssXtraInit()
                 GNSS_XTRA_SET_CALLBACK, req, &status);
 
             if (status || !isReplySuccess(reply)) {
-                qWarning("Initialising GNSS Xtra interface failed\n");
+                qWarning("Initialising GNSS Xtra interface failed");
             }
             gbinder_local_request_unref(req);
         }
@@ -1045,7 +1045,7 @@ bool BinderLocationBackend::gnssXtraInjectXtraData(QByteArray &xtraData)
         }
 
         if (!ret) {
-            qWarning("GNSS Xtra inject xtra data failed\n");
+            qWarning("GNSS Xtra inject xtra data failed");
         }
         gbinder_local_request_unref(req);
         gbinder_remote_reply_unref(reply);
@@ -1066,7 +1066,7 @@ void BinderLocationBackend::aGnssInit()
         m_remoteAGnss = getExtensionObject(reply);
 
         if (m_remoteAGnss) {
-            qWarning("Initialising AGNSS interface\n");
+            qWarning("Initialising AGNSS interface");
             GBinderLocalRequest *req;
             m_clientAGnss = gbinder_client_new(m_remoteAGnss, AGNSS_REMOTE);
             m_callbackAGnss = gbinder_servicemanager_new_local_object
@@ -1082,7 +1082,7 @@ void BinderLocationBackend::aGnssInit()
 
             if (!status) {
                 if (!gbinder_remote_reply_read_int32(reply, &status) || status != 0) {
-                    qWarning("Initialising AGNSS interface failed %d\n", status);
+                    qWarning("Initialising AGNSS interface failed %d", status);
                 }
             }
             gbinder_local_request_unref(req);
@@ -1191,7 +1191,7 @@ void BinderLocationBackend::aGnssRilInit()
         m_remoteAGnssRil = getExtensionObject(reply);
 
         if (m_remoteAGnssRil) {
-            qWarning("Initialising AGNSS RIL interface\n");
+            qWarning("Initialising AGNSS RIL interface");
             GBinderLocalRequest *req;
             m_clientAGnssRil = gbinder_client_new(m_remoteAGnssRil, AGNSS_RIL_REMOTE);
             m_callbackAGnssRil = gbinder_servicemanager_new_local_object
@@ -1207,7 +1207,7 @@ void BinderLocationBackend::aGnssRilInit()
 
             if (!status) {
                 if (!gbinder_remote_reply_read_int32(reply, &status) || status != 0) {
-                    qWarning("Initialising AGNSS RIL interface failed %d\n", status);
+                    qWarning("Initialising AGNSS RIL interface failed %d", status);
                 }
             }
             gbinder_local_request_unref(req);

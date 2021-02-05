@@ -215,21 +215,30 @@ HybrisProvider::HybrisProvider(QObject *parent)
             m_xtraServers.enqueue(xtraServer);
         }
     }
+    if (!m_xtraServers.isEmpty())
+        qCDebug(lcGeoclueHybris) << "Overriding XTRA servers with" << m_xtraServers;
 
     m_useForcedXtraInject = settings.value("xtra/XTRA_FORCE_INJECT", "").toBool();
+    if (m_useForcedXtraInject)
+        qCDebug(lcGeoclueHybris) << "Forcing XTRA data injection";
 
     QString xtraUserAgentFileName = settings.value("xtra/XTRA_USERAGENT_FILE", QString()).toString();
     if (!xtraUserAgentFileName.isEmpty()) {
         QFile xtraUserAgentFile(xtraUserAgentFileName);
         if (xtraUserAgentFile.open(QIODevice::ReadOnly)) {
             m_xtraUserAgent = xtraUserAgentFile.readLine();
+            qCDebug(lcGeoclueHybris) << "Overriding XTRA user agent with" << m_xtraUserAgent;
         }
     }
 
     m_useForcedNtpInject = settings.value("ntp/NTP_FORCE_INJECT", "").toBool();
+    if (m_useForcedNtpInject)
+        qCDebug(lcGeoclueHybris) << "Forcing NTP injection";
 
-    m_suplHost = settings.value("supl/SUPL_HOST", QString()).toString();
-    m_suplPort = settings.value("supl/SUPL_PORT", "").toInt();
+    m_suplHost = settings.value("supl/SUPL_HOST").toString();
+    m_suplPort = settings.value("supl/SUPL_PORT").toInt();
+    if (!m_suplHost.isEmpty() && m_suplPort > 0)
+        qCDebug(lcGeoclueHybris) << "Overriding SUPL server with" << m_suplHost << "port" << m_suplPort;
 
     if (m_xtraServers.isEmpty() || m_suplHost.isEmpty() || m_suplPort == 0) {
         loadDefaultsFromConfigurationFile();
@@ -249,8 +258,10 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_backend->gnssDebugInit();
 
     // Set SUPL server if provided
-    if (!m_suplHost.isEmpty() && m_suplPort != 0)
-        m_backend->aGnssSetServer(HYBRIS_AGNSS_TYPE_SUPL, m_suplHost.toLatin1().constData(), m_suplPort);
+    if (!m_suplHost.isEmpty() && m_suplPort > 0) {
+        if (!m_backend->aGnssSetServer(HYBRIS_AGNSS_TYPE_SUPL, m_suplHost.toLatin1().constData(), m_suplPort))
+            qWarning("Setting SUPL server to %s (%i) failed", m_suplHost.toLatin1().constData(), m_suplPort);
+    }
 }
 
 HybrisProvider::~HybrisProvider()
@@ -488,12 +499,14 @@ void HybrisProvider::timerEvent(QTimerEvent *event)
 
 void HybrisProvider::setLocation(const Location &location)
 {
-    qCDebug(lcGeoclueHybrisPosition) << location.timestamp() << location.latitude()
+    qCDebug(lcGeoclueHybrisPosition) << "Set location"
+                                     << location.timestamp() << location.latitude()
                                      << location.longitude() << location.altitude();
 
     // Stop listening to all PositionChanged signals from org.freedesktop.Geoclue.Position
     // interfaces.
     if (m_positionInjectionConnected) {
+        qCDebug(lcGeoclueHybrisPosition) << "Stop listening to all PositionChanged signals";
         QDBusConnection conn = QDBusConnection::sessionBus();
         conn.disconnect(QString(), QString(), QStringLiteral("org.freedesktop.Geoclue.Position"),
                         QStringLiteral("PositionChanged"),
@@ -509,6 +522,7 @@ void HybrisProvider::setLocation(const Location &location)
     m_currentLocation = location;
 
     if (m_currentLocation.timestamp() != 0 && m_currentLocation.timestamp() < GnssWeekRolloverTimestamp) {
+        qCDebug(lcGeoclueHybris) << "Fixing timestamp offset";
         m_currentLocation.setTimestamp(m_currentLocation.timestamp() + GnssWeekRolloverTimestampOffset);
     }
 
@@ -560,7 +574,7 @@ void HybrisProvider::injectPosition(int fields, int timestamp, double latitude, 
     if (!(positionFields & LatitudePresent && positionFields & LongitudePresent))
         return;
 
-    qCDebug(lcGeoclueHybris) << fields << timestamp << latitude << longitude << altitude
+    qCDebug(lcGeoclueHybris) << "Injecting position" << fields << timestamp << latitude << longitude << altitude
                              << accuracy.horizontal() << accuracy.vertical();
 
     m_backend->gnssInjectLocation(latitude, longitude, accuracy.horizontal());
@@ -721,7 +735,7 @@ void HybrisProvider::xtraDownloadRequestSendNext()
     if (m_xtraServerIndex >= m_xtraServers.count())
         return;
 
-    qCDebug(lcGeoclueHybris) << m_xtraServers;
+    qCDebug(lcGeoclueHybris) << "XTRA servers" << m_xtraServers;
 
     QNetworkRequest network_request(m_xtraServers[m_xtraServerIndex]);
     if (!m_xtraUserAgent.isEmpty()) {
@@ -738,7 +752,7 @@ void HybrisProvider::xtraDownloadFinished()
     if (!m_xtraDownloadReply)
         return;
 
-    qCDebug(lcGeoclueHybris);
+    qCDebug(lcGeoclueHybris) << "XTRA download finished";
 
     m_xtraDownloadReply->deleteLater();
 
@@ -771,7 +785,7 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
     Q_UNUSED(ssid)
     Q_UNUSED(password)
 
-    qCDebug(lcGeoclueHybris) << "type:" << type << "status:" << status;
+    qCDebug(lcGeoclueHybris) << "AGNSS type:" << type << "status:" << status;
 
     if (!m_agpsEnabled) {
         m_backend->aGnssDataConnFailed();
@@ -805,7 +819,7 @@ void HybrisProvider::agpsStatus(qint16 type, quint16 status, const QHostAddress 
 
 void HybrisProvider::dataServiceConnected()
 {
-    qCDebug(lcGeoclueHybris);
+    qCDebug(lcGeoclueHybris) << "Data service connected";
 
     if (!m_agpsOnlineEnabled)
         return;
@@ -831,7 +845,7 @@ void HybrisProvider::dataServiceConnected()
 
 void HybrisProvider::connectionErrorReported(const QString &path, const QString &error)
 {
-    qCDebug(lcGeoclueHybris) << path << error;
+    qCDebug(lcGeoclueHybris) << "Connection error" << path << error;
 
     if (path.contains(QStringLiteral("cellular")))
         m_backend->aGnssDataConnFailed();
@@ -862,7 +876,7 @@ void HybrisProvider::setMagneticVariation(double variation)
 
 void HybrisProvider::engineOn()
 {
-    qCDebug(lcGeoclueHybris);
+    qCDebug(lcGeoclueHybris) << "Engine on";
 
     // The GPS is being turned back on because a position update is required soon.
 
@@ -876,7 +890,7 @@ void HybrisProvider::engineOn()
 
 void HybrisProvider::engineOff()
 {
-    qCDebug(lcGeoclueHybris);
+    qCDebug(lcGeoclueHybris) << "Engine off";
 
     // The GPS is being turned off because a position update is not required for a while.
 
@@ -926,7 +940,7 @@ void HybrisProvider::defaultDataModemChanged(const QString &modem)
 
 void HybrisProvider::connectionManagerValidChanged()
 {
-    qCDebug(lcGeoclueHybris);
+    qCDebug(lcGeoclueHybris) << "Connection manager valid changed";
 
     if (m_agpsOnlineEnabled && !m_agpsInterface.isEmpty())
         processConnectionContexts();
@@ -934,7 +948,7 @@ void HybrisProvider::connectionManagerValidChanged()
 
 void HybrisProvider::connectionContextValidChanged()
 {
-    qCDebug(lcGeoclueHybris);
+    qCDebug(lcGeoclueHybris) << "Connection context valid changed";
 
     if (!m_agpsOnlineEnabled)
         return;
@@ -958,7 +972,7 @@ void HybrisProvider::connectionContextValidChanged()
 
 void HybrisProvider::cellularConnected(bool connected)
 {
-    qCDebug(lcGeoclueHybris) << connected;
+    qCDebug(lcGeoclueHybris) << "Cellular connected" << connected;
     if (connected)
         dataServiceConnected();
 }
@@ -1139,7 +1153,7 @@ quint32 HybrisProvider::minimumRequestedUpdateInterval() const
 
 void HybrisProvider::startDataConnection()
 {
-    qCDebug(lcGeoclueHybris);
+    qCDebug(lcGeoclueHybris) << "Start data connection";
 
     if (!m_agpsOnlineEnabled) {
         qCDebug(lcGeoclueHybris) << "Online aGPS not enabled, not starting data connection.";
@@ -1169,7 +1183,7 @@ void HybrisProvider::startDataConnection()
 
 void HybrisProvider::stopDataConnection()
 {
-    qCDebug(lcGeoclueHybris);
+    qCDebug(lcGeoclueHybris) << "Stop data connection";
 
     if (!m_requestedConnect)
         return;
@@ -1190,7 +1204,7 @@ void HybrisProvider::stopDataConnection()
 
 void HybrisProvider::sendNtpRequest()
 {
-    qCDebug(lcGeoclueHybris) << m_ntpServers;
+    qCDebug(lcGeoclueHybris) << "Send NTP request. Servers:" << m_ntpServers;
 
     if (!m_agpsOnlineEnabled) {
         qCDebug(lcGeoclueHybris) << "Online aGPS not enabled, not sending NTP request.";

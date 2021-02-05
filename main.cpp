@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
     supplementaryGroups[numberGroups++] = group->gr_gid;
 
     // remove nfc, audio, radio and bluetooth groups to avoid confusion in BSP
-    char *groups_to_remove[] = {"bluetooth", "radio", "audio", "nfc", NULL};
+    const char *groups_to_remove[] = {"bluetooth", "radio", "audio", "nfc", NULL};
 
     int idx = 0;
     while (groups_to_remove[idx]) {

@@ -17,18 +17,15 @@ Source100: geoclue-providers-hybris.inc
 %description
 %{summary}.
 
-
 %prep
-%setup -q -n %{name}-%{version}
-
+%autosetup -n %{name}-%{version}
 
 %build
 %{qmake_command}
-make %{?_smp_mflags}
-
+%make_build
 
 %install
-make INSTALL_ROOT=%{buildroot} install
+%make_install
 
 %files
 %defattr(04755,root,root,-)
