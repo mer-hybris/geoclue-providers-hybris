@@ -61,6 +61,8 @@ int main(int argc, char *argv[])
     int idx = 0;
     while (groups_to_remove[idx]) {
         group = getgrnam(groups_to_remove[idx]);
+        if (!group)
+            continue;
         idx++;
 
         if (idx + 1 < numberGroups) {
