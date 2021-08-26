@@ -18,8 +18,12 @@
 
 #include <android-config.h>
 
+#include <errno.h>
+#include <grp.h>
 #include <strings.h>
 #include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 // Define versions of the Android GPS interface supported.
 #if ANDROID_VERSION_MAJOR >= 7
@@ -398,6 +402,65 @@ struct GpsXtraCallbacksWrapper {
 HalLocationBackend::HalLocationBackend(QObject *parent)
 :   HybrisLocationBackend(parent), m_gps(Q_NULLPTR), m_agps(Q_NULLPTR), m_agpsril(Q_NULLPTR), m_gpsni(Q_NULLPTR), m_xtra(Q_NULLPTR), m_debug(Q_NULLPTR)
 {
+    uid_t realUid;
+    uid_t effectiveUid;
+    uid_t savedUid;
+
+    int result = getresuid(&realUid, &effectiveUid, &savedUid);
+    if (result == -1)
+        qFatal("Failed to get process uids, %s", strerror(errno));
+
+    gid_t supplementaryGroups[NGROUPS_MAX];
+    int numberGroups = getgroups(NGROUPS_MAX, supplementaryGroups);
+    if (numberGroups == -1)
+        qFatal("Failed to get supplementary groups, %s", strerror(errno));
+
+    if (numberGroups + 1 > NGROUPS_MAX)
+        qFatal("Too many supplementary groups");
+
+    group *group = getgrnam("gps");
+    if (!group)
+        qFatal("Failed to get id of gps group, %s", strerror(errno));
+
+    supplementaryGroups[numberGroups++] = group->gr_gid;
+
+    // remove nfc, audio, radio and bluetooth groups to avoid confusion in BSP
+    const char *groups_to_remove[] = {"bluetooth", "radio", "audio", "nfc", NULL};
+
+    for (int idx = 0; idx < numberGroups; idx++) {
+        for (int j = 0; groups_to_remove[j]; j++) {
+            group = getgrnam(groups_to_remove[j]);
+            if (group) {
+                if (supplementaryGroups[idx] == group->gr_gid) {
+                    // remove it
+                    qCDebug(lcGeoclueHybris, "Removing supplementary group %s (%i)", groups_to_remove[j], supplementaryGroups[idx]);
+                    memmove((void*)&supplementaryGroups[idx], (void*)&supplementaryGroups[idx + 1], (numberGroups - idx) * sizeof(gid_t));
+                    numberGroups--;
+                }
+            }
+        }
+    }
+
+#if GEOCLUE_ANDROID_GPS_INTERFACE >= 2
+    group = getgrnam("net_raw");
+    if (group) {
+        if (numberGroups + 1 > NGROUPS_MAX)
+            qWarning("Too many supplementary groups, can't add net_raw");
+        else
+            supplementaryGroups[numberGroups++] = group->gr_gid;
+    }
+#endif
+
+    numberGroups = setgroups(numberGroups, supplementaryGroups);
+    if (numberGroups == -1)
+        qFatal("Failed to set supplementary groups, %s", strerror(errno));
+
+#if GEOCLUE_ANDROID_GPS_INTERFACE == 1
+    // Drop privileges.
+    result = setuid(realUid);
+    if (result == -1)
+        qFatal("Failed to set process uid to %d, %s", realUid, strerror(errno));
+#endif
 }
 
 HalLocationBackend::~HalLocationBackend()

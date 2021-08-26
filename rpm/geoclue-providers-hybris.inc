@@ -28,7 +28,11 @@ Source100: geoclue-providers-hybris.inc
 %make_install
 
 %files
+%if 0%{?with_suid}
 %defattr(04755,root,root,-)
+%else
+%defattr(-,root,root,-)
+%endif
 %{_libexecdir}/geoclue-hybris
 %defattr(-,root,root,-)
 %{_sysconfdir}/dbus-1

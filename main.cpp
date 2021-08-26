@@ -18,17 +18,8 @@
 
 #include <locationsettings.h>
 
-#include <unistd.h>
-#include <sys/types.h>
-#include <grp.h>
-#include <errno.h>
-
 int main(int argc, char *argv[])
 {
-    uid_t realUid;
-    uid_t effectiveUid;
-    uid_t savedUid;
-
 #if QT_VERSION >= QT_VERSION_CHECK(5, 3, 0)
     QCoreApplication::setSetuidAllowed(true);
 #endif
@@ -36,61 +27,6 @@ int main(int argc, char *argv[])
                                                     "geoclue.provider.hybris.nmea.debug=false\n"
                                                     "geoclue.provider.hybris.position.debug=false"));
     QCoreApplication a(argc, argv);
-
-    int result = getresuid(&realUid, &effectiveUid, &savedUid);
-    if (result == -1)
-        qFatal("Failed to get process uids, %s", strerror(errno));
-
-    gid_t supplementaryGroups[NGROUPS_MAX];
-    int numberGroups = getgroups(NGROUPS_MAX, supplementaryGroups);
-    if (numberGroups == -1)
-        qFatal("Failed to get supplementary groups, %s", strerror(errno));
-
-    if (numberGroups + 1 > NGROUPS_MAX)
-        qFatal("Too many supplementary groups");
-
-    group *group = getgrnam("gps");
-    if (!group)
-        qFatal("Failed to get id of gps group, %s", strerror(errno));
-
-    supplementaryGroups[numberGroups++] = group->gr_gid;
-
-    // remove nfc, audio, radio and bluetooth groups to avoid confusion in BSP
-    const char *groups_to_remove[] = {"bluetooth", "radio", "audio", "nfc", NULL};
-
-    for (int idx = 0; idx < numberGroups; idx++) {
-        for (int j = 0; groups_to_remove[j]; j++) {
-            group = getgrnam(groups_to_remove[j]);
-            if (group) {
-                if (supplementaryGroups[idx] == group->gr_gid) {
-                    // remove it
-                    memmove((void*)&supplementaryGroups[idx], (void*)&supplementaryGroups[idx + 1], (numberGroups - idx) * sizeof(gid_t));
-                    numberGroups--;
-                }
-            }
-        }
-    }
-
-#if GEOCLUE_ANDROID_GPS_INTERFACE >= 2
-    group = getgrnam("net_raw");
-    if (group) {
-        if (numberGroups + 1 > NGROUPS_MAX)
-            qWarning("Too many supplementary groups, can't add net_raw");
-        else
-            supplementaryGroups[numberGroups++] = group->gr_gid;
-    }
-#endif
-
-    numberGroups = setgroups(numberGroups, supplementaryGroups);
-    if (numberGroups == -1)
-        qFatal("Failed to set supplementary groups, %s", strerror(errno));
-
-#if GEOCLUE_ANDROID_GPS_INTERFACE == 1
-    // Drop privileges.
-    result = setuid(realUid);
-    if (result == -1)
-        qFatal("Failed to set process uid to %d, %s", realUid, strerror(errno));
-#endif
 
     QDBusConnection session = QDBusConnection::sessionBus();
     LocationSettings settings;
