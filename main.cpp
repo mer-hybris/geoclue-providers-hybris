@@ -58,16 +58,17 @@ int main(int argc, char *argv[])
     // remove nfc, audio, radio and bluetooth groups to avoid confusion in BSP
     const char *groups_to_remove[] = {"bluetooth", "radio", "audio", "nfc", NULL};
 
-    int idx = 0;
-    while (groups_to_remove[idx]) {
-        group = getgrnam(groups_to_remove[idx]);
-        idx++;
-
-        if (idx + 1 < numberGroups) {
-            memmove((void*)&supplementaryGroups[idx], (void*)&supplementaryGroups[idx + 1], (numberGroups - idx - 1) * sizeof(gid_t));
+    for (int idx = 0; idx < numberGroups; idx++) {
+        for (int j = 0; groups_to_remove[j]; j++) {
+            group = getgrnam(groups_to_remove[j]);
+            if (group) {
+                if (supplementaryGroups[idx] == group->gr_gid) {
+                    // remove it
+                    memmove((void*)&supplementaryGroups[idx], (void*)&supplementaryGroups[idx + 1], (numberGroups - idx) * sizeof(gid_t));
+                    numberGroups--;
+                }
+            }
         }
-
-        numberGroups--;
     }
 
 #if GEOCLUE_ANDROID_GPS_INTERFACE >= 2
