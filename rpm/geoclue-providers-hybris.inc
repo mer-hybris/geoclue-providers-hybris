@@ -33,6 +33,7 @@ Source100: geoclue-providers-hybris.inc
 %else
 %defattr(-,root,root,-)
 %endif
+%license COPYING
 %{_libexecdir}/geoclue-hybris
 %defattr(-,root,root,-)
 %{_sysconfdir}/dbus-1
