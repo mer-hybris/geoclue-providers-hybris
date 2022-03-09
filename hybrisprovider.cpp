@@ -520,6 +520,10 @@ void HybrisProvider::setLocation(const Location &location)
     }
 
     m_currentLocation = location;
+    Accuracy acc;
+    acc.setHorizontal(location.accuracy().horizontal());
+    acc.setVertical(location.accuracy().vertical());
+    m_currentLocation.setAccuracy(acc);
 
     if (m_currentLocation.timestamp() != 0 && m_currentLocation.timestamp() < GnssWeekRolloverTimestamp) {
         qCDebug(lcGeoclueHybris) << "Fixing timestamp offset";
