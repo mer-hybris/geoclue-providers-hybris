@@ -155,7 +155,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_ofonoExtModemManager(new QOfonoExtModemManager(this)),
     m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(Q_NULLPTR), m_ntpSocket(Q_NULLPTR),
     m_agpsEnabled(false), m_agpsOnlineEnabled(false), m_useForcedNtpInject(false), m_useForcedXtraInject(false),
-    m_suplPort(0)
+    m_suplPort(0), m_capabilities(0)
 {
     if (staticProvider)
         qFatal("Only a single instance of HybrisProvider is supported.");
@@ -496,6 +496,14 @@ void HybrisProvider::timerEvent(QTimerEvent *event)
         QObject::timerEvent(event);
     }
 }
+
+bool HybrisProvider::capabilitiesSupported(quint32 capabilities) {
+    return (m_capabilities & capabilities) == capabilities;
+};
+
+void HybrisProvider::setCapabilities(quint32 capabilities) {
+    m_capabilities = capabilities;
+};
 
 void HybrisProvider::setLocation(const Location &location)
 {
@@ -925,7 +933,7 @@ void HybrisProvider::stateChanged(const QString &state)
         if (m_useForcedXtraInject) {
             gnssXtraDownloadRequest();
         }
-        if (m_useForcedNtpInject) {
+        if (m_useForcedNtpInject && capabilitiesSupported(HYBRIS_GNSS_CAPABILITY_ON_DEMAND_TIME)) {
             injectUtcTime();
         }
     }
@@ -1062,7 +1070,7 @@ void HybrisProvider::startPositioningIfNeeded()
         if (m_useForcedXtraInject) {
             gnssXtraDownloadRequest();
         }
-        if (m_useForcedNtpInject) {
+        if (m_useForcedNtpInject && capabilitiesSupported(HYBRIS_GNSS_CAPABILITY_ON_DEMAND_TIME)) {
             injectUtcTime();
         }
     }
