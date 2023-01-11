@@ -681,7 +681,10 @@ bool HalLocationBackend::aGnssDataConnOpen(const QByteArray &apn, const QString 
 
 int HalLocationBackend::aGnssSetServer(HybrisAGnssType type, const char* hostname, int port)
 {
-    return m_agps->set_server(type, hostname, port);
+    if (m_agps) {
+        return m_agps->set_server(type, hostname, port);
+    }
+    return 0;
 }
 
 // AGnssRil
