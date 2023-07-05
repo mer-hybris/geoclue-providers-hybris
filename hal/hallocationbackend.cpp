@@ -323,6 +323,31 @@ void gnssXtraDownloadRequest()
     QMetaObject::invokeMethod(staticProvider, "xtraDownloadRequest", Qt::QueuedConnection);
 }
 
+void aFlpLocationCallback(int32_t locationsCount, FlpLocation** locations)
+{
+}
+
+void aFlpAcquireWakelockCallback()
+{
+}
+
+void aFlpReleaseWakelockCallback()
+{
+}
+
+int32_t aFlpSetThreadEventCallback(ThreadEvent event)
+{
+    return FLP_RESULT_SUCCESS;;
+}
+
+void aFlpCapabilitiesCallback(int32_t capabilities)
+{
+}
+
+void aFlpStatusCallback(int32_t status)
+{
+}
+
 #if GEOCLUE_ANDROID_GPS_INTERFACE >= 2
 HybrisApnIpType fromContextProtocol(const QString &protocol)
 {
@@ -388,6 +413,16 @@ AGpsRilCallbacks agpsRilCallbacks = {
     createThreadCallback
 };
 
+FlpCallbacks aFlpCallbacks = {
+    sizeof(FlpCallbacks),
+    aFlpLocationCallback,
+    aFlpAcquireWakelockCallback,
+    aFlpReleaseWakelockCallback,
+    aFlpSetThreadEventCallback,
+    aFlpCapabilitiesCallback,
+    aFlpStatusCallback
+};
+
 // Work-around for compatibility, the public definition of GpsXtraCallbacks has only two members,
 // however, some hardware adaptation definitions contain an extra report_xtra_server_cb member.
 // Add extra pointer length padding and initialise it to nullptr to prevent crashes.
@@ -400,7 +435,7 @@ struct GpsXtraCallbacksWrapper {
 };
 
 HalLocationBackend::HalLocationBackend(QObject *parent)
-:   HybrisLocationBackend(parent), m_gps(Q_NULLPTR), m_agps(Q_NULLPTR), m_agpsril(Q_NULLPTR), m_gpsni(Q_NULLPTR), m_xtra(Q_NULLPTR), m_debug(Q_NULLPTR)
+:   HybrisLocationBackend(parent), m_gps(Q_NULLPTR), m_agps(Q_NULLPTR), m_agpsril(Q_NULLPTR), m_gpsni(Q_NULLPTR), m_xtra(Q_NULLPTR), m_debug(Q_NULLPTR), m_flp(Q_NULLPTR)
 {
     uid_t realUid;
     uid_t effectiveUid;
@@ -536,6 +571,12 @@ void HalLocationBackend::gnssCleanup()
 
     if (m_gpsDevice->common.close)
         m_gpsDevice->common.close(reinterpret_cast<hw_device_t *>(m_gpsDevice));
+
+    if (m_flp)
+        m_flp->cleanup();
+
+    if (m_flpDevice->common.close)
+        m_flpDevice->common.close(reinterpret_cast<hw_device_t *>(m_flpDevice));
 }
 
 bool HalLocationBackend::gnssInjectLocation(double latitudeDegrees, double longitudeDegrees, float accuracyMeters)
@@ -694,5 +735,40 @@ void HalLocationBackend::aGnssRilInit()
     if (m_agpsril) {
         qWarning("Initialising AGPS RIL Interface");
         m_agpsril->init(&agpsRilCallbacks);
+    }
+}
+
+// AFlp
+bool HalLocationBackend::aFlpInit()
+{
+    const hw_module_t *hwModule;
+
+    int error = hw_get_module(FUSED_LOCATION_HARDWARE_MODULE_ID, &hwModule);
+    if (error) {
+        qWarning("Android FLP interface not found, error %d", error);
+        return false;
+    }
+
+    qWarning("Android FLP hardware module \"%s\" \"%s\" %u.%u", hwModule->id, hwModule->name,
+             hwModule->module_api_version, hwModule->hal_api_version);
+    error = hwModule->methods->open(hwModule, FUSED_LOCATION_HARDWARE_MODULE_ID,
+                                    reinterpret_cast<hw_device_t **>(&m_flpDevice));
+    if (error) {
+        qWarning("Failed to open GPS device, error %d", error);
+        return false;
+    }
+
+    m_flp = m_flpDevice->get_flp_interface(m_flpDevice);
+    if (!m_flp) {
+        qWarning("get_flp_interface error!");
+        return false;
+    }
+
+    qWarning("Initialising FLP interface");
+
+    error = m_flp->init(&aFlpCallbacks);
+    if (error) {
+        qWarning("Failed to initialise FLP interface, error %d", error);
+        return false;
     }
 }
