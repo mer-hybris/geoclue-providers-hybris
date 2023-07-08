@@ -141,6 +141,9 @@ public:
     // AGnssRil
     virtual void aGnssRilInit() = 0;
 
+    // aFlpInit
+    virtual bool aFlpInit() = 0;
+
 };
 
 HybrisLocationBackend *getLocationBackend();

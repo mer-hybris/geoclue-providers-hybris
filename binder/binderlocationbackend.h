@@ -71,6 +71,9 @@ public:
     // AGnssRil
     void aGnssRilInit();
 
+    // AFlp
+    bool aFlpInit();
+
 private:
     bool isReplySuccess(GBinderRemoteReply *reply);
     GBinderRemoteObject *getExtensionObject(GBinderRemoteReply *reply);

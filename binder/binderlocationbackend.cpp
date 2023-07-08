@@ -1215,3 +1215,8 @@ void BinderLocationBackend::aGnssRilInit()
     }
     gbinder_remote_reply_unref(reply);
 }
+
+// AFlp
+bool BinderLocationBackend::aFlpInit()
+{
+}
