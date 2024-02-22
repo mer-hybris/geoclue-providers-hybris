@@ -6,7 +6,6 @@ Type=dbus
 ExecStart=/usr/libexec/geoclue-hybris
 BusName=org.freedesktop.Geoclue.Providers.Hybris
 #Sandboxing
-Capabilities=
 PrivateTmp=yes
 ProtectHome=yes
 ProtectSystem=full
