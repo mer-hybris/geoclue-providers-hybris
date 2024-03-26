@@ -21,11 +21,11 @@ Source100: geoclue-providers-hybris.inc
 %autosetup -n %{name}-%{version}
 
 %build
-%{qmake_command}
+%qmake5
 %make_build
 
 %install
-%make_install
+%qmake_install
 
 %files
 %if 0%{?with_suid}
