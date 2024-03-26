@@ -10,7 +10,7 @@ Obsoletes: geoclue-provider-hybris < %{version}-%{release}
 BuildRequires: pkgconfig(libgbinder)
 
 # hardcoded build command, can be autodetected
-%define qmake_command qmake -qt=5 binder/binderlocationbackend.pro
+%define qmake_command %qmake5 binder/binderlocationbackend.pro
 
 %include rpm/geoclue-providers-hybris.inc
 
