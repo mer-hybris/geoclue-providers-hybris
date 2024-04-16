@@ -22,6 +22,7 @@
 #include <QtNetwork/QNetworkReply>
 
 #include "hybrislocationbackend.h"
+#include <networkmanager.h>
 
 #include <locationsettings.h>
 
@@ -42,7 +43,6 @@ class ComJollaConnectiondInterface;
 class ComJollaLipstickConnectionSelectorIfInterface;
 class MGConfItem;
 class DeviceControl;
-class NetworkManager;
 class NetworkTechnology;
 class QOfonoExtModemManager;
 class QOfonoConnectionManager;
@@ -149,7 +149,7 @@ private slots:
     void engineOff();
 
     void technologiesChanged();
-    void stateChanged(const QString &state);
+    void stateChanged(NetworkManager::State state);
     void defaultDataModemChanged(const QString &modem);
     void connectionManagerValidChanged();
     void connectionContextValidChanged();

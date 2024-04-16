@@ -28,7 +28,6 @@
 #include <QtDBus/QDBusConnection>
 #include <QtDBus/QDBusMessage>
 
-#include <networkmanager.h>
 #include <networkservice.h>
 
 #include <qofonomanager.h>
@@ -175,8 +174,8 @@ HybrisProvider::HybrisProvider(QObject *parent)
 
     m_manager = new QNetworkAccessManager(this);
 
-    connect(m_networkManager, SIGNAL(technologiesChanged()), this, SLOT(technologiesChanged()));
-    connect(m_networkManager, SIGNAL(stateChanged(QString)), this, SLOT(stateChanged(QString)));
+    connect(m_networkManager, &NetworkManager::technologiesChanged, this, &HybrisProvider::technologiesChanged);
+    connect(m_networkManager, &NetworkManager::globalStateChanged, this, &HybrisProvider::stateChanged);
 
     technologiesChanged();
 
@@ -919,9 +918,9 @@ void HybrisProvider::technologiesChanged()
     }
 }
 
-void HybrisProvider::stateChanged(const QString &state)
+void HybrisProvider::stateChanged(NetworkManager::State state)
 {
-    if (state == "online" && m_gpsStarted) {
+    if (state == NetworkManager::OnlineState && m_gpsStarted) {
         if (m_useForcedXtraInject) {
             gnssXtraDownloadRequest();
         }
@@ -1058,7 +1057,7 @@ void HybrisProvider::startPositioningIfNeeded()
 
     m_gpsStarted = true;
 
-    if (m_networkManager->state() == "online") {
+    if (m_networkManager->globalState() == NetworkManager::OnlineState) {
         if (m_useForcedXtraInject) {
             gnssXtraDownloadRequest();
         }
