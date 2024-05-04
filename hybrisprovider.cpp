@@ -255,6 +255,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
     m_backend->aGnssRilInit();
     m_backend->gnssXtraInit();
     m_backend->gnssDebugInit();
+    m_backend->aFlpInit();
 
     // Set SUPL server if provided
     if (!m_suplHost.isEmpty() && m_suplPort > 0) {

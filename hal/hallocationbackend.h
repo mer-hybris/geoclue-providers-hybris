@@ -24,6 +24,7 @@
 
 #include <android-version.h>
 #include <hardware/gps.h>
+#include <hardware/fused_location.h>
 
 #include <locationsettings.h>
 
@@ -69,8 +70,12 @@ public:
     // AGnssRil
     void aGnssRilInit();
 
+    // AFlp
+    bool aFlpInit();
+
 private:
     gps_device_t *m_gpsDevice;
+    flp_device_t *m_flpDevice;
 
     const GpsInterface *m_gps;
 
@@ -80,6 +85,8 @@ private:
     const GpsXtraInterface *m_xtra;
 
     const GpsDebugInterface *m_debug;
+
+    const FlpLocationInterface *m_flp;
 };
 
 #endif // HALLOCATIONBACKEND_H
