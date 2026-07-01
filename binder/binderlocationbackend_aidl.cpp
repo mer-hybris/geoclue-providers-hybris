@@ -488,6 +488,10 @@ BinderLocationBackendAidl::BinderLocationBackendAidl(QObject *parent)
 bool BinderLocationBackendAidl::isSupported()
 {
     bool ret = false;
+    if (qgetenv("GEOCLUE_HYBRIS_DISABLE_AIDL") == "1"){
+        return false;
+    }
+
     GBinderServiceManager *sm =
         gbinder_servicemanager_new(GNSS_BINDER_DEFAULT_DEV);
 
