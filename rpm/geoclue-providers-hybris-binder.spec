@@ -7,7 +7,7 @@ Conflicts: geoclue-provider-hybris-hal
 Obsoletes: geoclue-provider-hybris < %{version}-%{release}
 
 # libgbinder is currently not a common package, so we have to rely on tar_git.
-BuildRequires: pkgconfig(libgbinder)
+BuildRequires: pkgconfig(libgbinder) >= 1.1.47
 
 # hardcoded build command, can be autodetected
 %define qmake_command %qmake5 binder/binderlocationbackend.pro

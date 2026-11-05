@@ -33,6 +33,8 @@
 #include <qofonomanager.h>
 #include <qofonoconnectionmanager.h>
 #include <qofonoconnectioncontext.h>
+#include <qofonosimmanager.h>
+#include <qofononetworkregistration.h>
 
 #include <qofonoextmodemmanager.h>
 
@@ -153,7 +155,10 @@ HybrisProvider::HybrisProvider(QObject *parent)
       m_requestedConnect(false), m_gpsStarted(false), m_locationSettings(nullptr),
       m_networkManager(new NetworkManager(this)), m_cellularTechnology(nullptr),
       m_ofonoExtModemManager(new QOfonoExtModemManager(this)),
-      m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(nullptr), m_ntpSocket(nullptr),
+      m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(nullptr),
+      m_simManager(new QOfonoSimManager(this)),
+      m_networkRegistration(new QOfonoNetworkRegistration(this)),
+      m_ntpSocket(nullptr),
       m_agpsEnabled(false), m_agpsOnlineEnabled(false), m_useForcedNtpInject(false), m_useForcedXtraInject(false),
       m_suplPort(0)
 {
@@ -571,6 +576,10 @@ void HybrisProvider::injectPosition(int fields, int timestamp, double latitude, 
     if (!(positionFields & LatitudePresent && positionFields & LongitudePresent))
         return;
 
+    if (timestamp <= 0 || !(accuracy.horizontal() > 0) ||
+            !qIsFinite(latitude) || !qIsFinite(longitude))
+        return;
+
     qCDebug(lcGeoclueHybris) << "Injecting position" << fields << timestamp << latitude << longitude << altitude
                              << accuracy.horizontal() << accuracy.vertical();
 
@@ -933,6 +942,87 @@ void HybrisProvider::defaultDataModemChanged(const QString &modem)
     qCDebug(lcGeoclueHybris) << "Default data modem changed to" << modem;
 
     m_connectionManager->setModemPath(modem);
+    m_simManager->setModemPath(modem);
+    m_networkRegistration->setModemPath(modem);
+}
+
+namespace
+{
+
+int agnssCellType(const QString &technology)
+{
+    if (technology.compare(QLatin1String("lte"), Qt::CaseInsensitive) == 0)
+        return HYBRIS_AGNSS_REF_LTE_CELLID;
+    if (technology.compare(QLatin1String("nr"), Qt::CaseInsensitive) == 0)
+        return HYBRIS_AGNSS_REF_NR_CELLID;
+    if (technology.compare(QLatin1String("umts"), Qt::CaseInsensitive) == 0 ||
+            technology.compare(QLatin1String("hsdpa"), Qt::CaseInsensitive) == 0 ||
+            technology.compare(QLatin1String("hsupa"), Qt::CaseInsensitive) == 0 ||
+            technology.compare(QLatin1String("hspa"), Qt::CaseInsensitive) == 0)
+        return HYBRIS_AGNSS_REF_UMTS_CELLID;
+    if (technology.compare(QLatin1String("gsm"), Qt::CaseInsensitive) == 0 ||
+            technology.compare(QLatin1String("edge"), Qt::CaseInsensitive) == 0 ||
+            technology.compare(QLatin1String("gprs"), Qt::CaseInsensitive) == 0)
+        return HYBRIS_AGNSS_REF_GSM_CELLID;
+    return 0;
+}
+
+}
+
+void HybrisProvider::agpsSetIdRequest(int flags)
+{
+    QString imsi;
+
+    if (flags != 0 && (flags & HYBRIS_AGNSS_SETID_IMSI) == 0) {
+        qCDebug(lcGeoclueHybris) << "AGNSS set id request" << flags << "does not ask for IMSI";
+        return;
+    }
+
+    if (!m_simManager->isValid()) {
+        qCDebug(lcGeoclueHybris) << "AGNSS set id request, SIM manager is not valid";
+        return;
+    }
+
+    imsi = m_simManager->subscriberIdentity();
+    if (imsi.isEmpty()) {
+        qCDebug(lcGeoclueHybris) << "AGNSS set id request, IMSI is empty";
+        return;
+    }
+
+    qCDebug(lcGeoclueHybris) << "AGNSS set IMSI, length" << imsi.length();
+    m_backend->aGnssRilSetSetId(HYBRIS_AGNSS_SETID_IMSI, imsi.toLatin1());
+}
+
+void HybrisProvider::agpsRefLocationRequest()
+{
+    HybrisAGnssCell cell;
+    QString technology;
+
+    if (!m_networkRegistration->isValid()) {
+        qCDebug(lcGeoclueHybris) << "AGNSS reference location request, registration is not valid";
+        return;
+    }
+
+    technology = m_networkRegistration->technology();
+    cell.type = agnssCellType(technology);
+    cell.mcc = m_networkRegistration->mcc().toInt();
+    cell.mnc = m_networkRegistration->mnc().toInt();
+    cell.lac = (int)m_networkRegistration->locationAreaCode();
+    cell.cid = m_networkRegistration->cellId();
+    cell.tac = 0;
+    cell.pcid = 0;
+
+    if (cell.type == HYBRIS_AGNSS_REF_LTE_CELLID || cell.type == HYBRIS_AGNSS_REF_NR_CELLID)
+        cell.tac = cell.lac;
+
+    if (cell.type == 0 || cell.mcc == 0 || cell.cid == 0) {
+        qCDebug(lcGeoclueHybris) << "AGNSS reference location is incomplete, technology" << technology;
+        return;
+    }
+
+    qCDebug(lcGeoclueHybris) << "AGNSS set reference cell" << technology
+                             << cell.mcc << cell.mnc << cell.lac << cell.cid;
+    m_backend->aGnssRilSetRefLocation(cell);
 }
 
 void HybrisProvider::connectionManagerValidChanged()

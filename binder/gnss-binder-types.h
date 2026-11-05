@@ -201,4 +201,23 @@ typedef struct agnss_status_ip_v6 {
 
 G_STATIC_ASSERT(sizeof(AGnssStatusIpV6) == 18);
 
+typedef struct agnss_ref_location_cell_id {
+    guint8 type ALIGNED(1);
+    guint16 mcc ALIGNED(2);
+    guint16 mnc ALIGNED(2);
+    guint16 lac ALIGNED(2);
+    guint32 cid ALIGNED(4);
+    guint16 tac ALIGNED(2);
+    guint16 pcid ALIGNED(2);
+} ALIGNED(4) AGnssRefLocationCellID;
+
+G_STATIC_ASSERT(sizeof(AGnssRefLocationCellID) == 16);
+
+typedef struct agnss_ref_location {
+    guint8 type ALIGNED(1);
+    AGnssRefLocationCellID cellID ALIGNED(4);
+} ALIGNED(4) AGnssRefLocation;
+
+G_STATIC_ASSERT(sizeof(AGnssRefLocation) == 20);
+
 #endif // GNSS_BINDER_TYPES_H

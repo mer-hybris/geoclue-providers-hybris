@@ -413,10 +413,22 @@ GBinderLocalReply *geoclue_binder_agnss_ril_callback(
         gbinder_remote_request_init_reader(req, &reader);
         switch (code) {
         case AGNSS_AIDL_RIL_REQUEST_SET_ID_CB:
-            qCDebug(lcGeoclueHybris) << "AGNSS RIL request ref ID";
+            {
+            gint32 flags = HYBRIS_AGNSS_SETID_IMSI;
+            gbinder_reader_read_int32(&reader, &flags);
+            qCDebug(lcGeoclueHybris) << "AGNSS RIL request set id" << flags;
+            if (staticProvider) {
+                QMetaObject::invokeMethod(staticProvider, "agpsSetIdRequest",
+                                          Qt::QueuedConnection, Q_ARG(int, (int)flags));
+            }
+            }
             break;
         case AGNSS_AIDL_RIL_REQUEST_REF_LOC_CB:
             qCDebug(lcGeoclueHybris) << "AGNSS RIL request ref location";
+            if (staticProvider) {
+                QMetaObject::invokeMethod(staticProvider, "agpsRefLocationRequest",
+                                          Qt::QueuedConnection);
+            }
             break;
         default:
             qWarning("Failed to decode callback %u", code);
@@ -643,25 +655,37 @@ bool BinderLocationBackendAidl::gnssInjectLocation(
         req = gbinder_client_new_request(m_clientGnss);
         gbinder_local_request_init_writer(req, &writer);
 
-        /* Non-null parcelable */
-        gbinder_writer_append_int32(&writer, 1);
-        /* Parcelable size */
-        gbinder_writer_append_int32(&writer,
-            sizeof(gint32) + 3 * sizeof(gdouble) + 6 * sizeof(gfloat));
+        /*
+         * GnssLocation is flags, nine doubles, timestampMillis, then
+         * ElapsedRealtime. The previous writer used floats and left the
+         * timestamp outside the parcelable size, so the HAL read accuracy
+         * and time as zero.
+         */
+        const gint64 timestampMs = (gint64)timestamp * 1000;
+        GBinderWriter location;
+        GBinderWriter elapsed;
 
-        gbinder_writer_append_int32(&writer,
+        gbinder_writer_start_parcelable(&writer, &location);
+        gbinder_writer_append_int32(&location,
             HYBRIS_GNSS_LOCATION_HAS_LAT_LONG |
             HYBRIS_GNSS_LOCATION_HAS_HORIZONTAL_ACCURACY);
-        gbinder_writer_append_double(&writer, latitudeDegrees);
-        gbinder_writer_append_double(&writer, longitudeDegrees);
-        gbinder_writer_append_double(&writer, 0);
-        gbinder_writer_append_float(&writer, 0);
-        gbinder_writer_append_float(&writer, 0);
-        gbinder_writer_append_float(&writer, accuracyMeters);
-        gbinder_writer_append_float(&writer, 0);
-        gbinder_writer_append_float(&writer, 0);
-        gbinder_writer_append_float(&writer, 0);
-        gbinder_writer_append_int64(&writer, timestamp);
+        gbinder_writer_append_double(&location, latitudeDegrees);
+        gbinder_writer_append_double(&location, longitudeDegrees);
+        gbinder_writer_append_double(&location, 0);
+        gbinder_writer_append_double(&location, 0);
+        gbinder_writer_append_double(&location, 0);
+        gbinder_writer_append_double(&location, accuracyMeters);
+        gbinder_writer_append_double(&location, 0);
+        gbinder_writer_append_double(&location, 0);
+        gbinder_writer_append_double(&location, 0);
+        gbinder_writer_append_int64(&location, timestampMs);
+
+        gbinder_writer_start_parcelable(&location, &elapsed);
+        gbinder_writer_append_int32(&elapsed, 0);
+        gbinder_writer_append_int64(&elapsed, 0);
+        gbinder_writer_append_double(&elapsed, 0);
+        gbinder_writer_finish_parcelable(&elapsed);
+        gbinder_writer_finish_parcelable(&location);
 
         reply = gbinder_client_transact_sync_reply(m_clientGnss,
             GNSS_AIDL_INJECT_LOCATION, req, &status);
@@ -1037,6 +1061,91 @@ int BinderLocationBackendAidl::aGnssSetServer(
     gbinder_local_request_unref(req);
     gbinder_remote_reply_unref(reply);
 
+    return ret;
+}
+
+bool BinderLocationBackendAidl::aGnssRilSetSetId(int type, const QByteArray &setId)
+{
+    int status = 0;
+    bool ret = false;
+    GBinderLocalRequest *req;
+    GBinderRemoteReply *reply;
+    GBinderWriter writer;
+
+    if (!m_clientAGnssRil || setId.isEmpty())
+        return false;
+
+    req = gbinder_client_new_request(m_clientAGnssRil);
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_int32(&writer, type);
+    /* NDK AParcel_writeString stores the std::string as UTF-16. */
+    gbinder_writer_append_string16(&writer, setId.constData());
+    reply = gbinder_client_transact_sync_reply(m_clientAGnssRil,
+        AGNSS_AIDL_RIL_SET_ID, req, &status);
+
+    if (!status && isReplySuccess(reply))
+        ret = true;
+    if (!ret)
+        qWarning("AGNSS set id failed");
+
+    gbinder_local_request_unref(req);
+    gbinder_remote_reply_unref(reply);
+    return ret;
+}
+
+bool BinderLocationBackendAidl::aGnssRilSetRefLocation(const HybrisAGnssCell &cell)
+{
+    int status = 0;
+    bool ret = false;
+    GBinderLocalRequest *req;
+    GBinderRemoteReply *reply;
+    GBinderWriter writer;
+    GBinderWriter refLocation;
+    GBinderWriter cellId;
+    int type = cell.type;
+    int lac = cell.lac;
+
+    if (!m_clientAGnssRil || cell.type == 0 || cell.cid == 0)
+        return false;
+
+    /*
+     * The vendor radio call behind this HAL accepts GSM and UMTS cell ids.
+     * An LTE or NR cell is sent as UMTS: the TAC goes in lac and the cell
+     * id, which fits in a UMTS cid, stays in cid.
+     */
+    if (type == HYBRIS_AGNSS_REF_LTE_CELLID || type == HYBRIS_AGNSS_REF_NR_CELLID) {
+        type = HYBRIS_AGNSS_REF_UMTS_CELLID;
+        if (cell.tac != 0)
+            lac = cell.tac;
+    }
+
+    req = gbinder_client_new_request(m_clientAGnssRil);
+    gbinder_local_request_init_writer(req, &writer);
+
+    gbinder_writer_start_parcelable(&writer, &refLocation);
+    gbinder_writer_append_int32(&refLocation, type);
+    gbinder_writer_start_parcelable(&refLocation, &cellId);
+    gbinder_writer_append_int32(&cellId, type);
+    gbinder_writer_append_int32(&cellId, cell.mcc);
+    gbinder_writer_append_int32(&cellId, cell.mnc);
+    gbinder_writer_append_int32(&cellId, lac);
+    gbinder_writer_append_int64(&cellId, cell.cid);
+    gbinder_writer_append_int32(&cellId, cell.tac);
+    gbinder_writer_append_int32(&cellId, cell.pcid);
+    gbinder_writer_append_int32(&cellId, 0);
+    gbinder_writer_finish_parcelable(&cellId);
+    gbinder_writer_finish_parcelable(&refLocation);
+
+    reply = gbinder_client_transact_sync_reply(m_clientAGnssRil,
+        AGNSS_AIDL_RIL_SET_REF_LOCATION, req, &status);
+
+    if (!status && isReplySuccess(reply))
+        ret = true;
+    if (!ret)
+        qWarning("AGNSS set reference location failed");
+
+    gbinder_local_request_unref(req);
+    gbinder_remote_reply_unref(reply);
     return ret;
 }
 
