@@ -63,6 +63,8 @@ public:
 
     // AGnssRil
     void aGnssRilInit();
+    bool aGnssRilSetSetId(int type, const QByteArray &setId);
+    bool aGnssRilSetRefLocation(const HybrisAGnssCell &cell);
 
 protected:
     bool isReplySuccess(GBinderRemoteReply *reply);

@@ -16,6 +16,7 @@
 
 #include <cstdint>
 
+#include <QtCore/QByteArray>
 #include <QtCore/QObject>
 #include <QtCore/QString>
 
@@ -76,6 +77,29 @@ typedef uint16_t HybrisAGnssStatusValue;
 typedef uint16_t HybrisAGnssRefLocationType;
 
 typedef int HybrisNetworkType;
+
+enum {
+    HYBRIS_AGNSS_REF_GSM_CELLID = 1,
+    HYBRIS_AGNSS_REF_UMTS_CELLID = 2,
+    HYBRIS_AGNSS_REF_LTE_CELLID = 4,
+    HYBRIS_AGNSS_REF_NR_CELLID = 8,
+};
+
+enum {
+    HYBRIS_AGNSS_SETID_NONE = 0,
+    HYBRIS_AGNSS_SETID_IMSI = 1,
+    HYBRIS_AGNSS_SETID_MSISDN = 2,
+};
+
+struct HybrisAGnssCell {
+    int type;
+    int mcc;
+    int mnc;
+    int lac;
+    qint64 cid;
+    int tac;
+    int pcid;
+};
 
 enum {
     HYBRIS_GNSS_POSITION_MODE_STANDALONE = 0,
@@ -142,6 +166,17 @@ public:
 
     // AGnssRil
     virtual void aGnssRilInit() = 0;
+    virtual bool aGnssRilSetSetId(int type, const QByteArray &setId)
+    {
+        Q_UNUSED(type)
+        Q_UNUSED(setId)
+        return false;
+    }
+    virtual bool aGnssRilSetRefLocation(const HybrisAGnssCell &cell)
+    {
+        Q_UNUSED(cell)
+        return false;
+    }
 
 };
 
