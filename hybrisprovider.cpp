@@ -38,6 +38,8 @@
 
 #include <qofonoextmodemmanager.h>
 
+#include <MGConfItem>
+
 #include <strings.h>
 #include <sys/time.h>
 
@@ -158,6 +160,7 @@ HybrisProvider::HybrisProvider(QObject *parent)
       m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(nullptr),
       m_simManager(new QOfonoSimManager(this)),
       m_networkRegistration(new QOfonoNetworkRegistration(this)),
+      m_sendImsi(new MGConfItem(QStringLiteral("/sailfish/location/hybris/send_imsi"), this)),
       m_ntpSocket(nullptr),
       m_agpsEnabled(false), m_agpsOnlineEnabled(false), m_useForcedNtpInject(false), m_useForcedXtraInject(false),
       m_suplPort(0)
@@ -975,6 +978,12 @@ void HybrisProvider::agpsSetIdRequest(int flags)
 
     if (flags != 0 && (flags & HYBRIS_AGNSS_SETID_IMSI) == 0) {
         qCDebug(lcGeoclueHybris) << "AGNSS set id request" << flags << "does not ask for IMSI";
+        return;
+    }
+
+    if (!m_sendImsi->value(true).toBool()) {
+        qCDebug(lcGeoclueHybris) << "AGNSS set IMSI to 0";
+        m_backend->aGnssRilSetSetId(HYBRIS_AGNSS_SETID_IMSI, QByteArrayLiteral("0"));
         return;
     }
 

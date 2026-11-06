@@ -234,6 +234,7 @@ private:
     QOfonoConnectionContext *m_connectionContext;
     QOfonoSimManager *m_simManager;
     QOfonoNetworkRegistration *m_networkRegistration;
+    MGConfItem *m_sendImsi;
 
     QUdpSocket *m_ntpSocket;
     QBasicTimer m_ntpRetryTimer;

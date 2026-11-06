@@ -9,6 +9,7 @@ BuildRequires: pkgconfig(connman-qt5) >= 1.0.68
 BuildRequires: pkgconfig(qofono-qt5)
 BuildRequires: pkgconfig(qofonoext)
 BuildRequires: pkgconfig(systemsettings) >= 0.5.5
+BuildRequires: pkgconfig(mlite5)
 BuildRequires: pkgconfig(systemd)
 Requires: connectionagent-qt5 >= 0.9.20
 
