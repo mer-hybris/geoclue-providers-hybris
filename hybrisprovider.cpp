@@ -25,6 +25,7 @@
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QUdpSocket>
 #include <QtNetwork/QHostInfo>
+#include <QtCore/QTimer>
 #include <QtDBus/QDBusConnection>
 #include <QtDBus/QDBusMessage>
 
@@ -33,6 +34,8 @@
 #include <qofonomanager.h>
 #include <qofonoconnectionmanager.h>
 #include <qofonoconnectioncontext.h>
+#include <qofonosimmanager.h>
+#include <qofononetworkregistration.h>
 
 #include <qofonoextmodemmanager.h>
 
@@ -150,10 +153,13 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, QList<SatelliteIn
 HybrisProvider::HybrisProvider(QObject *parent)
     : QObject(parent), m_backend(nullptr),
       m_status(StatusUnavailable), m_positionInjectionConnected(false), m_xtraDownloadReply(nullptr), m_xtraServerIndex(0),
-      m_requestedConnect(false), m_gpsStarted(false), m_locationSettings(nullptr),
+      m_requestedConnect(false), m_gpsStarted(false), m_gnssInitialised(false), m_locationSettings(nullptr),
       m_networkManager(new NetworkManager(this)), m_cellularTechnology(nullptr),
       m_ofonoExtModemManager(new QOfonoExtModemManager(this)),
-      m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(nullptr), m_ntpSocket(nullptr),
+      m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(nullptr),
+      m_simManager(new QOfonoSimManager(this)),
+      m_networkRegistration(new QOfonoNetworkRegistration(this)),
+      m_ntpSocket(nullptr),
       m_agpsEnabled(false), m_agpsOnlineEnabled(false), m_useForcedNtpInject(false), m_useForcedXtraInject(false),
       m_suplPort(0)
 {
@@ -245,28 +251,15 @@ HybrisProvider::HybrisProvider(QObject *parent)
     }
 
     m_backend = getLocationBackend();
-
-    if (!m_backend || !m_backend->gnssInit()) {
+    if (!m_backend)
         m_status = StatusError;
-        return;
-    }
-
-    m_backend->aGnssInit();
-    m_backend->gnssNiInit();
-    m_backend->aGnssRilInit();
-    m_backend->gnssXtraInit();
-    m_backend->gnssDebugInit();
-
-    // Set SUPL server if provided
-    if (!m_suplHost.isEmpty() && m_suplPort > 0) {
-        if (!m_backend->aGnssSetServer(HYBRIS_AGNSS_TYPE_SUPL, m_suplHost.toLatin1().constData(), m_suplPort))
-            qWarning("Setting SUPL server to %s (%i) failed", m_suplHost.toLatin1().constData(), m_suplPort);
-    }
 }
 
 HybrisProvider::~HybrisProvider()
 {
     if (m_backend) {
+        if (m_gpsStarted)
+            m_backend->gnssStop();
         m_backend->gnssCleanup();
         delete m_backend;
     }
@@ -351,7 +344,8 @@ void HybrisProvider::AddReference()
         m_idleTimer.stop();
     }
 
-    startPositioningIfNeeded();
+    // Binder setup blocks. Finish the D-Bus reply before opening the HAL.
+    QTimer::singleShot(0, this, [this] { startPositioningIfNeeded(); });
 }
 
 void HybrisProvider::RemoveReference()
@@ -373,8 +367,6 @@ void HybrisProvider::RemoveReference()
         qCDebug(lcGeoclueHybris) << "no watched services, starting idle timer.";
         m_idleTimer.start(QuitIdleTime, this);
     }
-
-    stopPositioningIfNeeded();
 }
 
 QString HybrisProvider::GetProviderInfo(QString &description)
@@ -548,14 +540,12 @@ void HybrisProvider::serviceUnregistered(const QString &service)
         qCDebug(lcGeoclueHybris) << "no watched services, starting idle timer.";
         m_idleTimer.start(QuitIdleTime, this);
     }
-
-    stopPositioningIfNeeded();
 }
 
 void HybrisProvider::locationEnabledChanged()
 {
     if (positioningEnabled()) {
-        startPositioningIfNeeded();
+        QTimer::singleShot(0, this, [this] { startPositioningIfNeeded(); });
     } else {
         setLocation(Location());
         stopPositioningIfNeeded();
@@ -569,6 +559,10 @@ void HybrisProvider::injectPosition(int fields, int timestamp, double latitude, 
 
     PositionFields positionFields = static_cast<PositionFields>(fields);
     if (!(positionFields & LatitudePresent && positionFields & LongitudePresent))
+        return;
+
+    if (timestamp <= 0 || !(accuracy.horizontal() > 0) ||
+            !qIsFinite(latitude) || !qIsFinite(longitude))
         return;
 
     qCDebug(lcGeoclueHybris) << "Injecting position" << fields << timestamp << latitude << longitude << altitude
@@ -933,6 +927,87 @@ void HybrisProvider::defaultDataModemChanged(const QString &modem)
     qCDebug(lcGeoclueHybris) << "Default data modem changed to" << modem;
 
     m_connectionManager->setModemPath(modem);
+    m_simManager->setModemPath(modem);
+    m_networkRegistration->setModemPath(modem);
+}
+
+namespace
+{
+
+int agnssCellType(const QString &technology)
+{
+    if (technology.compare(QLatin1String("lte"), Qt::CaseInsensitive) == 0)
+        return HYBRIS_AGNSS_REF_LTE_CELLID;
+    if (technology.compare(QLatin1String("nr"), Qt::CaseInsensitive) == 0)
+        return HYBRIS_AGNSS_REF_NR_CELLID;
+    if (technology.compare(QLatin1String("umts"), Qt::CaseInsensitive) == 0 ||
+            technology.compare(QLatin1String("hsdpa"), Qt::CaseInsensitive) == 0 ||
+            technology.compare(QLatin1String("hsupa"), Qt::CaseInsensitive) == 0 ||
+            technology.compare(QLatin1String("hspa"), Qt::CaseInsensitive) == 0)
+        return HYBRIS_AGNSS_REF_UMTS_CELLID;
+    if (technology.compare(QLatin1String("gsm"), Qt::CaseInsensitive) == 0 ||
+            technology.compare(QLatin1String("edge"), Qt::CaseInsensitive) == 0 ||
+            technology.compare(QLatin1String("gprs"), Qt::CaseInsensitive) == 0)
+        return HYBRIS_AGNSS_REF_GSM_CELLID;
+    return 0;
+}
+
+}
+
+void HybrisProvider::agpsSetIdRequest(int flags)
+{
+    QString imsi;
+
+    if (flags != 0 && (flags & HYBRIS_AGNSS_SETID_IMSI) == 0) {
+        qCDebug(lcGeoclueHybris) << "AGNSS set id request" << flags << "does not ask for IMSI";
+        return;
+    }
+
+    if (!m_simManager->isValid()) {
+        qCDebug(lcGeoclueHybris) << "AGNSS set id request, SIM manager is not valid";
+        return;
+    }
+
+    imsi = m_simManager->subscriberIdentity();
+    if (imsi.isEmpty()) {
+        qCDebug(lcGeoclueHybris) << "AGNSS set id request, IMSI is empty";
+        return;
+    }
+
+    qCDebug(lcGeoclueHybris) << "AGNSS set IMSI, length" << imsi.length();
+    m_backend->aGnssRilSetSetId(HYBRIS_AGNSS_SETID_IMSI, imsi.toLatin1());
+}
+
+void HybrisProvider::agpsRefLocationRequest()
+{
+    HybrisAGnssCell cell;
+    QString technology;
+
+    if (!m_networkRegistration->isValid()) {
+        qCDebug(lcGeoclueHybris) << "AGNSS reference location request, registration is not valid";
+        return;
+    }
+
+    technology = m_networkRegistration->technology();
+    cell.type = agnssCellType(technology);
+    cell.mcc = m_networkRegistration->mcc().toInt();
+    cell.mnc = m_networkRegistration->mnc().toInt();
+    cell.lac = (int)m_networkRegistration->locationAreaCode();
+    cell.cid = m_networkRegistration->cellId();
+    cell.tac = 0;
+    cell.pcid = 0;
+
+    if (cell.type == HYBRIS_AGNSS_REF_LTE_CELLID || cell.type == HYBRIS_AGNSS_REF_NR_CELLID)
+        cell.tac = cell.lac;
+
+    if (cell.type == 0 || cell.mcc == 0 || cell.cid == 0) {
+        qCDebug(lcGeoclueHybris) << "AGNSS reference location is incomplete, technology" << technology;
+        return;
+    }
+
+    qCDebug(lcGeoclueHybris) << "AGNSS set reference cell" << technology
+                             << cell.mcc << cell.mnc << cell.lac << cell.cid;
+    m_backend->aGnssRilSetRefLocation(cell);
 }
 
 void HybrisProvider::connectionManagerValidChanged()
@@ -1009,6 +1084,33 @@ void HybrisProvider::emitSatelliteChanged()
                           m_usedPrns, m_visibleSatellites);
 }
 
+bool HybrisProvider::ensureGnss()
+{
+    if (m_gnssInitialised)
+        return true;
+
+    if (!m_backend || !m_backend->gnssInit()) {
+        setStatus(StatusError);
+        return false;
+    }
+
+    // AGNSS and XTRA wake the vendor assistance session, so they are opened
+    // only once a client is allowed to request a position.
+    m_backend->aGnssInit();
+    m_backend->gnssNiInit();
+    m_backend->aGnssRilInit();
+    m_backend->gnssXtraInit();
+    m_backend->gnssDebugInit();
+
+    if (!m_suplHost.isEmpty() && m_suplPort > 0) {
+        if (!m_backend->aGnssSetServer(HYBRIS_AGNSS_TYPE_SUPL, m_suplHost.toLatin1().constData(), m_suplPort))
+            qWarning("Setting SUPL server to %s (%i) failed", m_suplHost.toLatin1().constData(), m_suplPort);
+    }
+
+    m_gnssInitialised = true;
+    return true;
+}
+
 void HybrisProvider::startPositioningIfNeeded()
 {
     // Positioning is already started.
@@ -1025,7 +1127,11 @@ void HybrisProvider::startPositioningIfNeeded()
 
     m_idleTimer.stop();
 
-    if (!m_backend)
+    if (!m_backend || !ensureGnss())
+        return;
+
+    // The request may have ended while the HAL was opening.
+    if (m_watchedServices.isEmpty() || !positioningEnabled())
         return;
 
     // Listen to all PositionChanged signals from org.freedesktop.Geoclue.Position interfaces.
@@ -1054,6 +1160,9 @@ void HybrisProvider::startPositioningIfNeeded()
     }
 
     m_gpsStarted = true;
+    // Available is kept so master does not drop a provider that already has a fix.
+    if (m_status != StatusAvailable)
+        setStatus(StatusAcquiring);
 
     if (m_networkManager->globalState() == NetworkManager::OnlineState) {
         if (m_useForcedXtraInject) {

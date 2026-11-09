@@ -400,7 +400,7 @@ struct GpsXtraCallbacksWrapper {
 };
 
 HalLocationBackend::HalLocationBackend(QObject *parent)
-    : HybrisLocationBackend(parent), m_gps(nullptr), m_agps(nullptr), m_agpsril(nullptr)
+    : HybrisLocationBackend(parent), m_gpsDevice(nullptr), m_gps(nullptr), m_agps(nullptr), m_agpsril(nullptr)
     , m_gpsni(nullptr), m_xtra(nullptr), m_debug(nullptr)
 {
     uid_t realUid;
@@ -535,8 +535,16 @@ void HalLocationBackend::gnssCleanup()
     if (m_gps)
         m_gps->cleanup();
 
-    if (m_gpsDevice->common.close)
+    if (m_gpsDevice && m_gpsDevice->common.close)
         m_gpsDevice->common.close(reinterpret_cast<hw_device_t *>(m_gpsDevice));
+
+    m_gps = nullptr;
+    m_gpsDevice = nullptr;
+    m_agps = nullptr;
+    m_agpsril = nullptr;
+    m_gpsni = nullptr;
+    m_xtra = nullptr;
+    m_debug = nullptr;
 }
 
 bool HalLocationBackend::gnssInjectLocation(int timestamp, double latitudeDegrees, double longitudeDegrees, float accuracyMeters)

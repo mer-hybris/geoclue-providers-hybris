@@ -46,6 +46,8 @@ class NetworkTechnology;
 class QOfonoExtModemManager;
 class QOfonoConnectionManager;
 class QOfonoConnectionContext;
+class QOfonoSimManager;
+class QOfonoNetworkRegistration;
 
 class HybrisProvider : public QObject, public QDBusContext
 {
@@ -138,6 +140,8 @@ private slots:
     void xtraDownloadFinished();
     void agpsStatus(qint16 type, quint16 status, const QHostAddress &ipv4,
                     const QHostAddress &ipv6, const QByteArray &ssid, const QByteArray &password);
+    void agpsSetIdRequest(int flags);
+    void agpsRefLocationRequest();
     void dataServiceConnected();
     void connectionErrorReported(const QString &path, const QString &error);
     void connectionSelected(bool selected);
@@ -159,6 +163,7 @@ private:
 
     void emitLocationChanged();
     void emitSatelliteChanged();
+    bool ensureGnss();
     void startPositioningIfNeeded();
     void stopPositioningIfNeeded();
     void setStatus(Status status);
@@ -218,6 +223,7 @@ private:
     bool m_requestedConnect;
 
     bool m_gpsStarted;
+    bool m_gnssInitialised;
 
     LocationSettings *m_locationSettings;
 
@@ -228,6 +234,8 @@ private:
     QOfonoExtModemManager *m_ofonoExtModemManager;
     QOfonoConnectionManager *m_connectionManager;
     QOfonoConnectionContext *m_connectionContext;
+    QOfonoSimManager *m_simManager;
+    QOfonoNetworkRegistration *m_networkRegistration;
 
     QUdpSocket *m_ntpSocket;
     QBasicTimer m_ntpRetryTimer;

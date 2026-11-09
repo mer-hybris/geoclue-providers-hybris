@@ -17,6 +17,8 @@
 
 #include <QtNetwork/QHostAddress>
 
+#include <string.h>
+
 #define GNSS_BINDER_DEFAULT_DEV  "/dev/hwbinder"
 
 enum GnssFunctions {
@@ -548,10 +550,22 @@ GBinderLocalReply *geoclue_binder_agnss_ril_callback(
         gbinder_remote_request_init_reader(req, &reader);
         switch (code) {
         case AGNSS_RIL_REQUEST_REF_ID_CB:
-            qCDebug(lcGeoclueHybris) << "AGNSS RIL request ref ID";
+            {
+            gint32 flags = HYBRIS_AGNSS_SETID_IMSI;
+            gbinder_reader_read_int32(&reader, &flags);
+            qCDebug(lcGeoclueHybris) << "AGNSS RIL request set id" << flags;
+            if (staticProvider) {
+                QMetaObject::invokeMethod(staticProvider, "agpsSetIdRequest",
+                                          Qt::QueuedConnection, Q_ARG(int, (int)flags));
+            }
+            }
             break;
         case AGNSS_RIL_REQUEST_REF_LOC_CB:
             qCDebug(lcGeoclueHybris) << "AGNSS RIL request ref location";
+            if (staticProvider) {
+                QMetaObject::invokeMethod(staticProvider, "agpsRefLocationRequest",
+                                          Qt::QueuedConnection);
+            }
             break;
         default:
             qWarning("Failed to decode callback %u", code);
@@ -1260,6 +1274,87 @@ int BinderLocationBackendHidl::aGnssSetServer(
     gbinder_local_request_unref(req);
     gbinder_remote_reply_unref(reply);
 
+    return ret;
+}
+
+bool BinderLocationBackendHidl::aGnssRilSetSetId(int type, const QByteArray &setId)
+{
+    int status = 0;
+    bool ret = false;
+    GBinderLocalRequest *req;
+    GBinderRemoteReply *reply;
+    GBinderWriter writer;
+
+    if (!m_clientAGnssRil || setId.isEmpty())
+        return false;
+
+    req = gbinder_client_new_request(m_clientAGnssRil);
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_int32(&writer, type);
+    gbinder_writer_append_hidl_string(&writer, setId.constData());
+    reply = gbinder_client_transact_sync_reply(m_clientAGnssRil,
+        AGNSS_RIL_SET_ID, req, &status);
+
+    if (!status && isReplySuccess(reply))
+        ret = true;
+    if (!ret)
+        qWarning("AGNSS set id failed");
+
+    gbinder_local_request_unref(req);
+    gbinder_remote_reply_unref(reply);
+    return ret;
+}
+
+static const GBinderWriterType agnss_ref_location_t = {
+    GBINDER_WRITER_STRUCT_NAME_AND_SIZE(AGnssRefLocation), NULL
+};
+
+bool BinderLocationBackendHidl::aGnssRilSetRefLocation(const HybrisAGnssCell &cell)
+{
+    int status = 0;
+    bool ret = false;
+    GBinderLocalRequest *req;
+    GBinderRemoteReply *reply;
+    GBinderWriter writer;
+    AGnssRefLocation location;
+    int type = cell.type;
+
+    if (!m_clientAGnssRil || cell.type == 0 || cell.cid == 0)
+        return false;
+
+    /*
+     * HIDL 1.0 AGnssRefLocation: uint8 type, then AGnssRefLocationCellID.
+     * NR is not in that enum, so send it as an LTE cell with the TAC in lac.
+     */
+
+    if (type == HYBRIS_AGNSS_REF_NR_CELLID)
+        type = HYBRIS_AGNSS_REF_LTE_CELLID;
+
+    memset(&location, 0, sizeof(location));
+    location.type = (guint8)type;
+    location.cellID.type = (guint8)type;
+    location.cellID.mcc = (guint16)cell.mcc;
+    location.cellID.mnc = (guint16)cell.mnc;
+    location.cellID.lac = (guint16)cell.lac;
+    if (type == HYBRIS_AGNSS_REF_LTE_CELLID && cell.tac != 0)
+        location.cellID.lac = (guint16)cell.tac;
+    location.cellID.cid = (guint32)cell.cid;
+    location.cellID.tac = (guint16)cell.tac;
+    location.cellID.pcid = (guint16)cell.pcid;
+
+    req = gbinder_client_new_request(m_clientAGnssRil);
+    gbinder_local_request_init_writer(req, &writer);
+    gbinder_writer_append_struct(&writer, &location, &agnss_ref_location_t, NULL);
+    reply = gbinder_client_transact_sync_reply(m_clientAGnssRil,
+        AGNSS_RIL_SET_REF_LOCATION, req, &status);
+
+    if (!status && isReplySuccess(reply))
+        ret = true;
+    if (!ret)
+        qWarning("AGNSS set reference location failed");
+
+    gbinder_local_request_unref(req);
+    gbinder_remote_reply_unref(reply);
     return ret;
 }
 
