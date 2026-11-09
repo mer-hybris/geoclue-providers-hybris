@@ -163,6 +163,7 @@ private:
 
     void emitLocationChanged();
     void emitSatelliteChanged();
+    bool ensureGnss();
     void startPositioningIfNeeded();
     void stopPositioningIfNeeded();
     void setStatus(Status status);
@@ -222,6 +223,7 @@ private:
     bool m_requestedConnect;
 
     bool m_gpsStarted;
+    bool m_gnssInitialised;
 
     LocationSettings *m_locationSettings;
 

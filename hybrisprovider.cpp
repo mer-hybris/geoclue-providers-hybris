@@ -25,6 +25,7 @@
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QUdpSocket>
 #include <QtNetwork/QHostInfo>
+#include <QtCore/QTimer>
 #include <QtDBus/QDBusConnection>
 #include <QtDBus/QDBusMessage>
 
@@ -152,7 +153,7 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, QList<SatelliteIn
 HybrisProvider::HybrisProvider(QObject *parent)
     : QObject(parent), m_backend(nullptr),
       m_status(StatusUnavailable), m_positionInjectionConnected(false), m_xtraDownloadReply(nullptr), m_xtraServerIndex(0),
-      m_requestedConnect(false), m_gpsStarted(false), m_locationSettings(nullptr),
+      m_requestedConnect(false), m_gpsStarted(false), m_gnssInitialised(false), m_locationSettings(nullptr),
       m_networkManager(new NetworkManager(this)), m_cellularTechnology(nullptr),
       m_ofonoExtModemManager(new QOfonoExtModemManager(this)),
       m_connectionManager(new QOfonoConnectionManager(this)), m_connectionContext(nullptr),
@@ -250,28 +251,15 @@ HybrisProvider::HybrisProvider(QObject *parent)
     }
 
     m_backend = getLocationBackend();
-
-    if (!m_backend || !m_backend->gnssInit()) {
+    if (!m_backend)
         m_status = StatusError;
-        return;
-    }
-
-    m_backend->aGnssInit();
-    m_backend->gnssNiInit();
-    m_backend->aGnssRilInit();
-    m_backend->gnssXtraInit();
-    m_backend->gnssDebugInit();
-
-    // Set SUPL server if provided
-    if (!m_suplHost.isEmpty() && m_suplPort > 0) {
-        if (!m_backend->aGnssSetServer(HYBRIS_AGNSS_TYPE_SUPL, m_suplHost.toLatin1().constData(), m_suplPort))
-            qWarning("Setting SUPL server to %s (%i) failed", m_suplHost.toLatin1().constData(), m_suplPort);
-    }
 }
 
 HybrisProvider::~HybrisProvider()
 {
     if (m_backend) {
+        if (m_gpsStarted)
+            m_backend->gnssStop();
         m_backend->gnssCleanup();
         delete m_backend;
     }
@@ -356,7 +344,8 @@ void HybrisProvider::AddReference()
         m_idleTimer.stop();
     }
 
-    startPositioningIfNeeded();
+    // Binder setup blocks. Finish the D-Bus reply before opening the HAL.
+    QTimer::singleShot(0, this, [this] { startPositioningIfNeeded(); });
 }
 
 void HybrisProvider::RemoveReference()
@@ -378,8 +367,6 @@ void HybrisProvider::RemoveReference()
         qCDebug(lcGeoclueHybris) << "no watched services, starting idle timer.";
         m_idleTimer.start(QuitIdleTime, this);
     }
-
-    stopPositioningIfNeeded();
 }
 
 QString HybrisProvider::GetProviderInfo(QString &description)
@@ -553,14 +540,12 @@ void HybrisProvider::serviceUnregistered(const QString &service)
         qCDebug(lcGeoclueHybris) << "no watched services, starting idle timer.";
         m_idleTimer.start(QuitIdleTime, this);
     }
-
-    stopPositioningIfNeeded();
 }
 
 void HybrisProvider::locationEnabledChanged()
 {
     if (positioningEnabled()) {
-        startPositioningIfNeeded();
+        QTimer::singleShot(0, this, [this] { startPositioningIfNeeded(); });
     } else {
         setLocation(Location());
         stopPositioningIfNeeded();
@@ -1099,6 +1084,33 @@ void HybrisProvider::emitSatelliteChanged()
                           m_usedPrns, m_visibleSatellites);
 }
 
+bool HybrisProvider::ensureGnss()
+{
+    if (m_gnssInitialised)
+        return true;
+
+    if (!m_backend || !m_backend->gnssInit()) {
+        setStatus(StatusError);
+        return false;
+    }
+
+    // AGNSS and XTRA wake the vendor assistance session, so they are opened
+    // only once a client is allowed to request a position.
+    m_backend->aGnssInit();
+    m_backend->gnssNiInit();
+    m_backend->aGnssRilInit();
+    m_backend->gnssXtraInit();
+    m_backend->gnssDebugInit();
+
+    if (!m_suplHost.isEmpty() && m_suplPort > 0) {
+        if (!m_backend->aGnssSetServer(HYBRIS_AGNSS_TYPE_SUPL, m_suplHost.toLatin1().constData(), m_suplPort))
+            qWarning("Setting SUPL server to %s (%i) failed", m_suplHost.toLatin1().constData(), m_suplPort);
+    }
+
+    m_gnssInitialised = true;
+    return true;
+}
+
 void HybrisProvider::startPositioningIfNeeded()
 {
     // Positioning is already started.
@@ -1115,7 +1127,11 @@ void HybrisProvider::startPositioningIfNeeded()
 
     m_idleTimer.stop();
 
-    if (!m_backend)
+    if (!m_backend || !ensureGnss())
+        return;
+
+    // The request may have ended while the HAL was opening.
+    if (m_watchedServices.isEmpty() || !positioningEnabled())
         return;
 
     // Listen to all PositionChanged signals from org.freedesktop.Geoclue.Position interfaces.
@@ -1144,6 +1160,9 @@ void HybrisProvider::startPositioningIfNeeded()
     }
 
     m_gpsStarted = true;
+    // Available is kept so master does not drop a provider that already has a fix.
+    if (m_status != StatusAvailable)
+        setStatus(StatusAcquiring);
 
     if (m_networkManager->globalState() == NetworkManager::OnlineState) {
         if (m_useForcedXtraInject) {
